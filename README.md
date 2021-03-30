@@ -3,7 +3,7 @@
 *Easier/Enhanced CSS3 Animations (ECA)*
 
 ECA is a library that extends the functionality of CSS3 animations. With ECA, you can animate elements on scroll, animate text with ease, easily set event listeners for pre/post animation, reverse 
-animation order, modify non animatable properties (e.g., display, position), create animation groups, and add staggered delays to elements--all without you writing a single line of JavaScript! 
+animation order, modify non animatable properties (e.g., display, position), create animation groups, and add staggered delays to elements--all without you writing a single line of JavaScript. 
 
 ## Table of Contents
 * [Why make this project](#why-make-this-project)
@@ -37,7 +37,7 @@ not predefined by the library. Its ease of use is what ends up making it so rigi
 
 In my opinion, we should be able to use CSS3 animations per the spec, written in CSS. Predefined animations are well and good, but we should not be forced to write new ones following guidelines set forth by a library. We should be able to write our css in a separate file, define the animations 
 we want there for elements and their respective classes (or use some predefined CSS animation library without hassle), and have it act how we want it without touching JavaScript--all which 
-eca does. 
+ECA does. 
 
 JS animation engines, on the other hand, are much more flexible but usually involve writing code 
 of the following form: 
@@ -62,9 +62,11 @@ Whatever the case, ECA does away with all that work by automating the above type
 
 ## Installation <a name="installation"></a>
 
-Download eca.js and place a script tag in your HTML like so
+Download the zip file <a href="https://minhaskamal.github.io/DownGit/#/home?url=https://github.com/plakich/eca/blob/main/eca.js">here</a>, extract eca.js from the zip, place eca.js in the appropriate directory based on your project structure, and place a script tag in your HTML like so
 
 `<script type="text/javascript" src="eca.js"></script>`
+
+(Thanks to <a href="https://github.com/MinhasKamal/DownGit#how-to-use">Minhas Kamal</a> and the DownGit project for the above link.)
 
 ## Basic Use <a name="basic-use"></a>
 
@@ -99,7 +101,7 @@ and in the CSS you might write, assuming you've defined an animation called fade
 And now your box elements will all show up on scroll, with the appropriate delays set (if you don't want staggered delays set, don't set them, 
 or if you want to use the same delay for all elements, just set it how you normally would via CSS animation-delay property). 
 
-Another big animation feature of eca is animating text characters. eca will wrap the text for you (in spans, for letters, and
+Another big animation feature of ECA is animating text characters. ECA will wrap the text for you (in spans, for letters, and
 divs, for words) so you don't have to manually do it yourself, all the while respecting any other tags you may have in your text, like anchors or other spans. So you can do this, for example.
 
 `<h1 class="hero__hero-text animate-chars">Our Very Long Hero Text!</h1>`
@@ -119,7 +121,7 @@ Then you might add an animation in CSS like so:
 	animation: bounce 1s ease-in forwards; 
 }
 ```
-And don't worry: eca keeps accessibility in mind too, so screen readers can
+And don't worry: ECA keeps accessibility in mind too, so screen readers can
 still read your text (that's what the aria-label is there for). 
 
 By the way, you're not limited to a single animation per element. The library doesn't change the way CSS works: it just helps it do more. So you could still, for instance, 
@@ -127,14 +129,14 @@ use the nth-of-type selector to have one set of elements play with one animation
 
 ## Advanced Use <a name="advanced-use"></a>
 
-There are quite a few options that eca uses to help you tweak and refine your animations to fit your use case. 
+There are quite a few options that ECA uses to help you tweak and refine your animations to fit your use case. 
 
 Many of the below options can either be set as a global option, on the HTML
 element of your page, or overridden on a per element basis. Others are simply global options or element options. **Note, none of these options are required.** 
 
-**By default, eca assumes the following are true:**
+**By default, ECA assumes the following are true:**
 
-* the user is using animations, not transitions, for animations (i.e., eca sets the animation-delay property when the user specifies a staggered delay)
+* the user is using animations, not transitions, for animations (i.e., ECA sets the animation-delay property when the user specifies a staggered delay)
 * staggered delays should start at the number specified, not zero (e.g., data-eca-stagger="100" will set the first element's delay as 100ms, the next as 200, not 0 for the first and 100 for the second)
 * elements should animate when their top touches the viewport bottom (no offset by default)
 * animations should only play once (e.g., if the user scrolls back up above the element, the element's animation will not reset and then play again when it comes back into view). 
@@ -152,11 +154,11 @@ The full list of options is below. Options that can be set globally (applying to
 | animate-all-on-first-sight (g/e)              | When one element of a group comes into view, all of the rest will also be animated, regardless of whether they're visible or not              |    true           |      false         |                                                               |  
 | animate-with-transitions (g/e)              | Affects delays and listeners set (e.g., if set to true, delays will be transition delays and listeners set with end will be transitionend).              |   true            |   false            |                                                               |
 | stagger (g/e)              | Stagger a group's animation delays by some multiplier. (e.g., data-eca-stagger="100" the first element will have 100ms delay, the second 200, and so on)              |     100ms          |     none          | Approx safe-max-int/group.length                                                              |
-| listen (e)              | Set event listeners (in json format) on animation/transition start, end, iteration, cancel, run to change styles.               | data-eca-listen=' { "end": "display: inline" } '              |  none             |                                                               | 
+| listen (e)              | Set event listeners (in JSON format) on animation/transition start, end, iteration, cancel, run to change styles.               | data-eca-listen=' { "end": "display: inline" } '              |  none             |                                                               | 
 | capture (e)              | Set event listener to fire during the capture phase.              | true              | false              |                                                               |
 | group-delay (e)              | A delay before any element of a group animates (see below for details)              | 1000ms               | 0              | 2^31 - 1 milliseconds or about 25 days                                                              |  
 | reverse (e)              | Reverse order of animation (e.g., first element will now animate last and last will animate first)               | true               | false              |                                                               |    
-| duration (e)              | Animation or transition duration. Not used by eca but useful to set if you use a custom tracking function (see below for details)               | 2s              | none               |                                                               | 
+| duration (e)              | Animation or transition duration. Not used by ECA but useful to set if you use a custom tracking function (see below for details)               | 2s              | none               |                                                               | 
 | char-delays (e)              | Specify unique delays (in JSON format) for each text character of a text element              | data-eca-char-delays=' { "1": "200", “3”: “2s” } '              | none              |                                                               |
 | delay (*)              | Specify a unique animation delay for some element in a group               | 100ms              | none              |                                                               |
 
@@ -184,22 +186,22 @@ Some important notes about a few of the advanced options:
 
 ### data-eca-offset: <a name="offset"></a>
 
-You can set any number you want for this but eca forces the max to always be half the element height plus half the screen’s height (window.innerHeight). This has to be the max because of how elements are considered to be visible. An element is visible when its top or bottom edge is in the range zero to window height (e.g., assume the screen is a box, the element a smaller box, the bottom of the screen point 0, and the top of the screen to be window Height, whatever the height of the window is). But offset is telling the app to adjust that behavior, to make the top farther down by offset amount. **Essentially, adding an offset to an element is like saying “yes, the top of the element might be past the bottom of the screen (point zero), but pretend it’s farther back still.”** 
+You can set any number you want for this but ECA forces the max to always be half the element height plus half the screen’s height (window.innerHeight). This has to be the max because of how elements are considered to be visible. An element is visible when its top or bottom edge is in the range zero to window height (e.g., assume the screen is a box, the element a smaller box, the bottom of the screen point 0, and the top of the screen to be window Height, whatever the height of the window is). But offset is telling the app to adjust that behavior, to make the top farther down by offset amount. **Essentially, adding an offset to an element is like saying “yes, the top of the element might be past the bottom of the screen (point zero), but pretend it’s farther back still.”** 
 
 **That pretending can lead to buggy behavior if we don’t set a max.** So we do a test. We place an element’s center in the center of the screen (half the window’s height) and calculate the distance from the element’s edge (half the element’s height) to the screen’s opposite edge (half window height plus half element height). This is the max offset because if it’s greater than this it would be saying the element’s edge (when offset is added to the edge) is outside the screen while in the center, which is obviously a bug. 
 
 But even if you stick within that range, no matter what, the element will be considered in view when it’s bottom touches the viewport bottom--so basically **the element’s height is the true max offset.** 
 
-**eca does this to prevent edge cases where elements are at or near the top or bottom edges of the document.** If an element is flush with the bottom of the document, for instance, it can’t be offset by any more than its height, because the screen isn’t scrollable past that amount.
+**ECA does this to prevent edge cases where elements are at or near the top or bottom edges of the document.** If an element is flush with the bottom of the document, for instance, it can’t be offset by any more than its height, because the screen isn’t scrollable past that amount.
 
 
 ### data-eca-remove-animation-when-not-in-view: <a name="reset-animation-state"></a>
 
-When set, this option removes the animated class from an element when it’s no longer visible on screen, which effectively removes the animation. If the animate-with-transitions option is set, and assuming the offset option is set as well, the animation will reverse when it’s no longer visible (transition back to its original state). If animate-with-transitions option is not set, and even if the offset option is set, eca will assume the user is using animations for animations, not transitions, which means only when the element goes completely out of view will the animated class be removed (because there’s no logical way to reverse complex animations, especially those involving transforms). In either case, whether using transitions or animations, setting the remove-animation-when-not-in-view option makes the element animatable again when it comes back into view (i.e., any animation defined for it will play again). 
+When set, this option removes the animated class from an element when it’s no longer visible on screen, which effectively removes the animation. If the animate-with-transitions option is set, and assuming the offset option is set as well, the animation will reverse when it’s no longer visible (transition back to its original state). If animate-with-transitions option is not set, and even if the offset option is set, ECA will assume the user is using animations for animations, not transitions, which means only when the element goes completely out of view will the animated class be removed (because there’s no logical way to reverse complex animations, especially those involving transforms). In either case, whether using transitions or animations, setting the remove-animation-when-not-in-view option makes the element animatable again when it comes back into view (i.e., any animation defined for it will play again). 
 
 Note, **this option only removes the animation one way, when the user scrolls back up the page and the element disappears below the viewport.** The other way, when the user keeps scrolling down such that the element disappears above the viewport, does not remove the animation. Although I wrote the app so elements have the chance to animate both ways (whether the user scrolls up to it or down the page to it), I decided to only have the animation state reset one way as explained above. 
 
-I made eca this way because of how most people define animations. A common animation to see on many pages is the fade up into view one, or having the element rise in some way. If the animation was removed when scrolling down the page (i.e., when the element is above the viewport) the element risks entering a cycle where the animation class is removed, immediately added again (because the user is still scrolling), and then removed again. For this reason, and because most sites have a logical scroll order (i.e., starting at the top, the user scrolls down the page), this option only removes the animation one way, when the element goes back below the viewport. 
+I made ECA this way because of how most people define animations. A common animation to see on many pages is the fade up into view one, or having the element rise in some way. If the animation was removed when scrolling down the page (i.e., when the element is above the viewport) the element risks entering a cycle where the animation class is removed, immediately added again (because the user is still scrolling), and then removed again. For this reason, and because most sites have a logical scroll order (i.e., starting at the top, the user scrolls down the page), this option only removes the animation one way, when the element goes back below the viewport. 
 
 ### data-eca-animate-all-on-first-sight vs default app behavior: <a name="animate-all-vs-default"></a>
 
@@ -233,7 +235,7 @@ The above listener sets an event listener for animation start and end events, wi
 
 I’ve found this option useful in the past for changing values that can’t be animated or transitioned. For example, I’ve set this (using the end key with display: inline) on hero text in the past that I’ve animated (transformed in some way) to reset the ugly letter spacing display: inline-block introduces for some fonts. 
 
-**When eca wraps text (when the user sets the animate-chars class on a text element), it automatically sets each character’s display as inline-block** so the text can be transformed, which the user can’t do if the display is left as the default inline. But there’s a catch if you want to reset the display to inline on animation end. If you’re using the remove-animation-when-not-in-view option, make sure to set the element's display (without the animated class) as inline-block in your CSS as well else the display will stay as inline after the first animation completes. 
+**When ECA wraps text (when the user sets the animate-chars class on a text element), it automatically sets each character’s display as inline-block** so the text can be transformed, which the user can’t do if the display is left as the default inline. But there’s a catch if you want to reset the display to inline on animation end. If you’re using the remove-animation-when-not-in-view option, make sure to set the element's display (without the animated class) as inline-block in your CSS as well else the display will stay as inline after the first animation completes. 
 
 Warning! Be careful how you set and use listeners in your app. There are various performance considerations to keep in mind (doing any animation work, actually: see below). The above example, for instance (changing the display of elements) can easily cause cumulative layout shifts, if you’re not careful. 
 
@@ -256,11 +258,11 @@ Small implementation note, I used a setTimeout for this option, so technically t
 
 ### trackingFn (tracking function): <a name="tracking-fn"></a>
 
-Sometimes you may want to do something other than change a style on animation/transition beginning or end (or maybe you want tighter control over a style you’re changing, using a custom easing equation perhaps). The listen attribute is limited to only that (and changing styles on other animation events). So in order to help the user carry out custom animation tasks, eca runs an optional function called trackingFn after the animated class is added to the elements.
+Sometimes you may want to do something other than change a style on animation/transition beginning or end (or maybe you want tighter control over a style you’re changing, using a custom easing equation perhaps). The listen attribute is limited to only that (and changing styles on other animation events). So in order to help the user carry out custom animation tasks, ECA runs an optional function called trackingFn after the animated class is added to the elements.
 
 For example, this is a bit contrived, but say the user wants to change the width of an element halfway through its CSS defined animation (and apply a new js run animation on top of the CSS one), apply a custom bounce easing equation (not possible with cubic bezier), and have the width continue to animate past the point of the element’s animation duration. We can use the trackingFn for that. First, the user would set the data-eca-duration attribute to more easily get the element’s animation duration. 
 
-Then the user would have to grab the element or element group using the eca.animatable.getElementArray function, which takes the element group name and returns the array with properties, such as duration, attached to it--eca keeps track of all animatable elements internally, and if you need one with the properties set on it, such as group delay or duration, then you’d use this function. 
+Then the user would have to grab the element or element group using the eca.animatable.getElementArray function, which takes the element group name and returns the array with properties, such as duration, attached to it--ECA keeps track of all animatable elements internally, and if you need one with the properties set on it, such as group delay or duration, then you’d use this function. 
 
 The code might look like this (tracking an element group identified by class blocks):
 
@@ -269,7 +271,7 @@ The code might look like this (tracking an element group identified by class blo
     {
        var blocks = []; 
        
-       blocks = eca.animatable.getElementArray("blocks"); //need to use this fn and not querySelectorAll since we need the instance of blocks that eca has attached properties to
+       blocks = eca.animatable.getElementArray("blocks"); //need to use this fn and not querySelectorAll since we need the instance of blocks that ECA has attached properties to
        
        /* 
           trackingFn fires after an animatable element has the animated class added to it.
@@ -360,11 +362,11 @@ See the memory issues section here for other considerations to keep in mind:
 
 https://developer.mozilla.org/en-US/docs/Web/API/EventTarget/addEventListener#memory_issues
 
-As I mentioned, this example was a bit contrived. You could forgo CSS animations entirely and animate strictly in js, using eca mainly for its scroll detection feature. You would still have to add the animate class in the html so eca would know you want that element animated. To know when the animated class was added, you could define an empty CSS animation (with just a name and empty keyframes) or use a mutation observer to see if any elements have had the animated class added to it--and then run your JS animation from there. 
+As I mentioned, this example was a bit contrived. You could forgo CSS animations entirely and animate strictly in js, using ECA mainly for its scroll detection feature. You would still have to add the animate class in the html so ECA would know you want that element animated. To know when the animated class was added, you could define an empty CSS animation (with just a name and empty keyframes) or use a mutation observer to see if any elements have had the animated class added to it--and then run your JS animation from there. 
   
 ## Identical Element Group Names and Animation Order <a name="distinct-element-names"></a>
 
-**eca assumes text elements with the same identifiers (i.e., text elements who have the same first class name on their class lists) are distinct elements, each part of a different group** of elements. **With normal elements, an element is part of the same group no matter where it’s at in the html as long as it has the same class name first in its class list.** So, for example, these divs across different sections are all considered part of the same element group:
+**ECA assumes text elements with the same identifiers (i.e., text elements who have the same first class name on their class lists) are distinct elements, each part of a different group** of elements. **With normal elements, an element is part of the same group no matter where it’s at in the html as long as it has the same class name first in its class list.** So, for example, these divs across different sections are all considered part of the same element group:
 
 ```
 <section class=”section-1”>
@@ -390,21 +392,21 @@ In the case of the text elements, whether stacked vertically or horizontally, ea
 
 This behavior also affects the group-delay option. In the case of the boxes, there’s only one group delay shared among the elements, whereas with the titles each will have its own group delay (if the user sets one). In the case of the boxes stacked vertically such that the second section’s boxes appear after the first, the second section’s boxes will not have the group delay applied to them again when they’re finally revealed. Similarly, if you’ve scrolled to the first section and the group delay is still ongoing, the second section’s boxes’ animations won’t start until the group delay is finished (because group delay applies to the whole group of elements and the boxes are all technically one group). 
 
-I made eca behave this way because of how many sites organize their CSS. Many have distinct typography styles for section headers and the like, reused by section (but still distinct), whereas each sections’ elements are relatively more differentiated (so if we find the same classes inside a section it’s more likely to be part of a group, as in the row of cards example above). 
+I made ECA behave this way because of how many sites organize their CSS. Many have distinct typography styles for section headers and the like, reused by section (but still distinct), whereas each sections’ elements are relatively more differentiated (so if we find the same classes inside a section it’s more likely to be part of a group, as in the row of cards example above). 
 
 ## Limitations <a name="limitations"></a>
 
-By default, eca fires on page load, and for now, this can’t be changed (see future updates below). Furthermore, eca only works with elements that are there when the page loads, so elements added dynamically with createElement won’t be taken into account (again, see <a name="future-updates">future updates</a> below). 
+By default, ECA fires on page load, and for now, this can’t be changed (see future updates below). Furthermore, ECA only works with elements that are there when the page loads, so elements added dynamically with createElement won’t be taken into account (again, see <a name="future-updates">future updates</a> below). 
 
-Also, eca changes styles dynamically by writing to the style attribute, so to use eca you have to make sure your Content Security Policy allows for this. (In the future, if we could set animation delays dynamically using CSS counter values with calc, there’d be no need to use inline styles, but until then, it’s the most flexible way to do this.) 
+Also, ECA changes styles dynamically by writing to the style attribute, so to use ECA you have to make sure your Content Security Policy allows for this. (In the future, if we could set animation delays dynamically using CSS counter values with calc, there’d be no need to use inline styles, but until then, it’s the most flexible way to do this.) 
 
 ## Future Updates <a name="future-updates"></a>
 
-This is the first version of eca. I could have done more with it, but I decided to make version 1.0 with the fundamentals I wanted solidified. That leaves room for future updates.
+This is the first version of ECA. I could have done more with it, but I decided to make version 1.0 with the fundamentals I wanted solidified. That leaves room for future updates.
 
 A small list of proposed changes/additions in future versions is as follows:
 
-1. On the code side, I’m rewriting everything in es6 using newer apis, like intersection observer for performance improvements (I wrote eca 1.0 in strictly es5 for widest possible browser support). 
+1. On the code side, I’m rewriting everything in es6 using newer apis, like intersection observer for performance improvements (I wrote ECA 1.0 in strictly es5 for widest possible browser support). 
 
 2. Support for animating dynamically added elements after page load.
 
