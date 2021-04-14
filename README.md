@@ -9,6 +9,7 @@ animation order, modify non animatable properties (e.g., display, position), cre
 * [Why make this project](#why-make-this-project)
 * [Installation](#installation)
 * [Basic Use](#basic-use)
+   - [Avoiding FOUT When Using animate-chars](#fout)
 * [Advanced Use](#advanced-use)
    - [Advanced Use Examples and Further Explanation](#advanced-use-ex)
       - [data-eca-offset](#offset)
@@ -18,6 +19,7 @@ animation order, modify non animatable properties (e.g., display, position), cre
       - [data-eca-char-delays](#char-delays)
       - [data-eca-group-delay](#group-delay)
       - [tracking function](#tracking-fn)
+* [Animations with Transforms and Sudden Page Jumping](#page-jumping)
 * [Identical Element Group Names and Animation Order](#distinct-element-names)
 * [Limitations](#limitations)
 * [Future Updates](#future-updates)
@@ -126,6 +128,52 @@ still read your text (that's what the aria-label is there for).
 
 By the way, you're not limited to a single animation per element. The library doesn't change the way CSS works: it just helps it do more. So you could still, for instance, 
 use the nth-of-type selector to have one set of elements play with one animation and another set play a different one, resulting in a completely new animation. 
+
+## Avoiding FOUT When Using animate-chars <a name="fout"></a>
+
+Since text is wrapped dynamically, it may introduce Flashes Of Unstyled Text (FOUT) when you have your animation set on the letter class. The easiest way to get rid of this is to make the initial state of the letter class animation the same on the parent container (the one containing the divs and spans). 
+
+For example, assume the following hero text "Hero" has been wrapped as follows: 
+
+```
+<h1 class="hero animate-chars" aria-label="Hero">
+	<div class="word">
+		<span class="letter">H</span>
+		<span class="letter">e</span>
+		<span class="letter">r</span>
+		<span class="letter">o</span>
+	</div>
+</h1>
+```
+
+Assuming we'd want to animate the opacity of each letter from 0 to 1, we'd do this for the parent container to avoid any FOUT:
+
+```
+.hero {
+	/* Obviously we might have 
+	some styles here before opacity
+	but they're left out in this example*/
+	
+	opacity: 0;
+}
+
+.hero[aria-label] { /* aria-label is added after ECA executes */
+	opacity: 1;
+}
+
+.hero .letter { 
+/* once the text is wrapped and aria-label
+is added to the parent, we'd have to set
+the parent's opacity back to 1 if we want to
+ever see the letter animation*/
+	opacity: 0;
+}
+
+.hero .letter.animated { /*simple animation from 0 to 1 opacity */
+	animation: fade-in 1s ease-in forwards;
+}
+
+```
 
 ## Advanced Use <a name="advanced-use"></a>
 
@@ -363,6 +411,34 @@ See the memory issues section here for other considerations to keep in mind:
 https://developer.mozilla.org/en-US/docs/Web/API/EventTarget/addEventListener#memory_issues
 
 As I mentioned, this example was a bit contrived. You could forgo CSS animations entirely and animate strictly in js, using ECA mainly for its scroll detection feature. You would still have to add the animate class in the html so ECA would know you want that element animated. To know when the animated class was added, you could define an empty CSS animation (with just a name and empty keyframes) or use a mutation observer to see if any elements have had the animated class added to it--and then run your JS animation from there. 
+
+## Animations with Transforms and Sudden Page Jumping <a name="page-jumping"></a>
+
+For whatever reason, animating with transforms on some browser/hardware combinations can cause page jumping to the left or right when reloading the page or on orientation change. For example, say you have an element off screen (translated to the right with translateX) that you want to translate back to 0. According to the <a href="https://www.w3.org/TR/css-transforms-1/#transform-rendering">spec</a>, transforms shouldn't affect layout but they do affect overflow. However, the translated element could cause the whole page to expand, even if you specify overflow-x: hidden on the body, as if the layout of the entire document (the width) was changed by the translated amount. 
+	
+A simple fix for this might be as follows:
+
+```
+//also set overflow-x: hidden on the body
+
+window.addEventListener("load", function()
+{
+	setTimeout(function()
+        {
+            
+            var html = document.querySelector('html'); 
+            //We need all three below because certain browsers will only work with a certain one in exclusion of the rest 
+            //(e.g., for ie only document.body works; the rest are ignored);
+            html.scrollLeft = 0; 
+            document.documentElement.scrollLeft = 0; 
+            document.body.scrollLeft = 0; 
+            
+            
+        }, 100); //need to wrap in setTimeout because page will jump (not all browsers but some) fraction of sec after load and after scrollLeft set to 0; 
+        //100ms above is a bit arbitrary since page could jump more than a 100ms after load, but for most browsers/different loads tested this works fine
+});
+
+```
   
 ## Identical Element Group Names and Animation Order <a name="distinct-element-names"></a>
 
@@ -396,7 +472,7 @@ I made ECA behave this way because of how many sites organize their CSS. Many ha
 
 ## Limitations <a name="limitations"></a>
 
-By default, ECA fires on page load, and for now, this can’t be changed (see future updates below). Furthermore, ECA only works with elements that are there when the page loads, so elements added dynamically with createElement won’t be taken into account (again, see <a name="future-updates">future updates</a> below). 
+By default, ECA fires on DCL, and for now, this can’t be changed (see future updates below). Furthermore, ECA only works with elements that are there when the document is parsed, so elements added dynamically with createElement won’t be taken into account (again, see <a name="future-updates">future updates</a> below). 
 
 Also, ECA changes styles dynamically by writing to the style attribute, so to use ECA you have to make sure your Content Security Policy allows for this. (In the future, if we could set animation delays dynamically using CSS counter values with calc, there’d be no need to use inline styles, but until then, it’s the most flexible way to do this.) 
 
@@ -415,6 +491,8 @@ A small list of proposed changes/additions in future versions is as follows:
 4. Offset fixes. The behavior I described for offset might be fixable, given I can implement a performant solution (to be looked into).
 
 5. Better support for running custom code. The trackingFn is a bit vague as of now, and to use it to track different parts of the animation (start, end), you might end up writing identical looking code in a few places. Code like that will be abstracted away in future versions. I also plan to add support for changing how (e.g., give the users an easy way to use event delegation vs adding event listeners per element) and when (e.g., on page load, vs immediately after the animated class is added) the function is run.
+
+6. Better group-delay timer precision. As mentioned above, you really shouldn't run into any problems with group-delay unless you're really bogging down the main thread. However, sometimes it's doing nothing that can cause problems. On many browsers, for instance, switching tabs automatically changes when timers fire. If your inactive tab was using a group delay, you may see a larger delay than you planned for. In future updates, delays will have their own thread via a dedicated worker, so this won't be a problem anymore.
 
 ## Make Your Animations Meaningful <a name="give-animations-meaning"></a>
 

@@ -2,12 +2,14 @@
 
 Welcome to the source code for Enhanced/Easier CSS Animations (eca)! 
 
-I had the idea for this app while working on my previous project,
-Storybook Websites, and my need to simplify how I dynamically added animations 
+I had the idea for this app while working on my company's site,
+Storybook Websites, which had a lot of animation code. I was
+spending a bit too much time on animation work, so I came up with
+the idea for how to simplify dynamically adding animations 
 to elements (mostly on scroll when they appeared).
 
-As such, most of the functions below I took straight from that app
-and expanded or modified. The readyElementsForAnimation function, for instance,
+As such, many of the functions below I took straight from that app
+and modified or rewrote. The readyElementsForAnimation function, for instance,
 since it was responsible for doing the main bulk of the "animation" work,
 was completely rewritten to automate how elements were selected from the DOM
 and grouped together into timelines for animation. 
@@ -23,7 +25,7 @@ element2.addSetupPropertiesToElements(prop1: ...)
 var element50 = document.... etc... 
 And even more code to group them together into timelines if needed... 
 
-With this framework there's no more of that! 
+With this library there's no more of that! 
 
 The main bulk of the functionality for this app
 is found in the readyElementsForAnimation 
@@ -53,17 +55,6 @@ was added).
             {
                 document.addEventListener('DOMContentLoaded', callback);
             } 
-        },
-        readyAll: function(callback)
-        {
-            if (document.readyState === 'complete')
-            {
-                callback();
-            }
-            else //wait for everything to load first
-            {
-                window.addEventListener('load', callback);
-            }
         },
         animatable: { elementsToAnimate: [] },
         appState: { windowHeight: window.innerHeight,  //so we can use this in scroll handlers without querying it every time (only updated on resize events)
@@ -352,7 +343,7 @@ was added).
     eca.animatable.readyElementsForAnimation = function()
     {
         
-        var elemsToBeAnimated = eca.helperFns.getElementsToArray(".animate"); 
+        var elemsToBeAnimated = eca.helperFns.getElementsToArray(".animate"); //animate class is set per group of elems
         var classNameOfElements = []; //list of each animatable elements' class name, which serves as identifier for an element group
         var groupOfElements = { }; //elements with same className will be part of same animation timeline
         
@@ -436,56 +427,58 @@ was added).
             //many properties have the option of setting a global property 
             //while leaving the option to overriding the gloabl setting per element
             var html = document.querySelector("html"); 
+            var elemGroup = groupOfElements[ classNameOfElements[j] ]; //array of animatable elems
+            var elemAttrs = elems[i]; //could've just used elemGroup[0] if not for text elems since dataset lives on parent for those
             
             //non-numeric keys of array obj are simply skipped over during 
             //iteration and length property ignores them
-            groupOfElements[ classNameOfElements[j] ].elemsIdentifier = classNameOfElements[j];  
-            groupOfElements[ classNameOfElements[j] ].delayMultiplier = eca.animatable.getDurationInMS(elems[i].dataset.ecaStagger || html.dataset.ecaStagger || "0ms"); //delay multiplier for staggered delay
-            groupOfElements[ classNameOfElements[j] ].delayFromZero = typeof elems[i].dataset.ecaStaggerFromZero !== "undefined" ? (elems[i].dataset.ecaStaggerFromZero.trim().toLowerCase() === "false" ? false : true) : 
+            elemGroup.elemsIdentifier = classNameOfElements[j];  
+            elemGroup.delayMultiplier = eca.animatable.getDurationInMS(elemAttrs.dataset.ecaStagger || html.dataset.ecaStagger || "0ms"); //delay multiplier for staggered delay
+            elemGroup.delayFromZero = typeof elemAttrs.dataset.ecaStaggerFromZero !== "undefined" ? (elemAttrs.dataset.ecaStaggerFromZero.trim().toLowerCase() === "false" ? false : true) : 
             (typeof html.dataset.ecaStaggerFromZero !== "undefined" ? 
             (html.dataset.ecaStaggerFromZero.trim().toLowerCase() === "false" ? false : true) : false); //setting this option will include zero as first multiple of delayMultiplier
             
-            groupOfElements[ classNameOfElements[j] ].duration = eca.animatable.getDurationInMS(elems[i].dataset.ecaDuration || "0ms"); //duration of animation
-            groupOfElements[ classNameOfElements[j] ].groupDelay = eca.animatable.getDurationInMS(elems[i].dataset.ecaGroupDelay || "0ms"); //delay for group of elements as a whole
+            elemGroup.duration = eca.animatable.getDurationInMS(elemAttrs.dataset.ecaDuration || "0ms"); //duration of animation
+            elemGroup.groupDelay = eca.animatable.getDurationInMS(elemAttrs.dataset.ecaGroupDelay || "0ms"); //delay for group of elements as a whole
             
-            groupOfElements[ classNameOfElements[j] ].finishedAnimating = false; 
-            groupOfElements[ classNameOfElements[j] ].numAnimated = 0; //so we can know when elems are finished animating
-            groupOfElements[ classNameOfElements[j] ].playOnLoad = typeof elems[i].dataset.ecaPlayOnLoad !== "undefined" ? (elems[i].dataset.ecaPlayOnLoad.trim().toLowerCase() === "false" ? false : true) : 
+            elemGroup.finishedAnimating = false; 
+            elemGroup.numAnimated = 0; //so we can know when elems are finished animating
+            elemGroup.playOnLoad = typeof elemAttrs.dataset.ecaPlayOnLoad !== "undefined" ? (elemAttrs.dataset.ecaPlayOnLoad.trim().toLowerCase() === "false" ? false : true) : 
             (typeof html.dataset.ecaPlayOnLoad !== "undefined" ? (html.dataset.ecaPlayOnLoad.trim().toLowerCase() === "false" ? false : true) : false); //play animation right away when page loads instead of on scroll
             
-            groupOfElements[ classNameOfElements[j] ].animateAllOnFirstSight = typeof elems[i].dataset.ecaAnimateAllOnFirstSight !== "undefined" ? 
-            (elems[i].dataset.ecaAnimateAllOnFirstSight.trim().toLowerCase() === "false" ? false : true)  : 
+            elemGroup.animateAllOnFirstSight = typeof elemAttrs.dataset.ecaAnimateAllOnFirstSight !== "undefined" ? 
+            (elemAttrs.dataset.ecaAnimateAllOnFirstSight.trim().toLowerCase() === "false" ? false : true)  : 
             (typeof html.dataset.ecaAnimateAllOnFirstSight !== "undefined" ? 
             (html.dataset.ecaAnimateAllOnFirstSight.trim().toLowerCase() === "false" ? false : true) : false); //if one element is in view, animate all regardless if user can see rest 
             
-            groupOfElements[ classNameOfElements[j] ].animateAllOnFirstSight = groupOfElements[ classNameOfElements[j] ].playOnLoad ? !groupOfElements[ classNameOfElements[j] ].playOnLoad :
-            groupOfElements[ classNameOfElements[j] ].animateAllOnFirstSight; //because playOnLoad and animateAll options are mutually exclusive 
+            elemGroup.animateAllOnFirstSight = elemGroup.playOnLoad ? !elemGroup.playOnLoad :
+            elemGroup.animateAllOnFirstSight; //because playOnLoad and animateAll options are mutually exclusive 
             
-            groupOfElements[ classNameOfElements[j] ].listen = elems[i].dataset.ecaListen; //event listeners and callbacks for animation start, end, iteration, cancel. 
-            groupOfElements[ classNameOfElements[j] ].capture = typeof elems[i].dataset.ecaCapture !== "undefined" ?  
-            (elems[i].dataset.ecaCapture.trim().toLowerCase() === "false" ? false : true) : false; //can set capture to true if user wants event listener to fire during capture phase
+            elemGroup.listen = elemAttrs.dataset.ecaListen; //event listeners and callbacks for animation start, end, iteration, cancel. 
+            elemGroup.capture = typeof elemAttrs.dataset.ecaCapture !== "undefined" ?  
+            (elemAttrs.dataset.ecaCapture.trim().toLowerCase() === "false" ? false : true) : false; //can set capture to true if user wants event listener to fire during capture phase
             
-            groupOfElements[ classNameOfElements[j] ].offset = typeof elems[i].dataset.ecaOffset !== "undefined" ? elems[i].dataset.ecaOffset : 
+            elemGroup.offset = typeof elemAttrs.dataset.ecaOffset !== "undefined" ? elemAttrs.dataset.ecaOffset : 
             typeof html.dataset.ecaOffset !== "undefined" ? html.dataset.ecaOffset : 0; //user defined offset (pixel offset for animation trigger point). 
             
-            groupOfElements[ classNameOfElements[j] ].offset = parseInt(groupOfElements[ classNameOfElements[j] ].offset, 10) === parseInt(groupOfElements[ classNameOfElements[j] ].offset, 10) 
-            ? parseInt(groupOfElements[ classNameOfElements[j] ].offset, 10) : 0; //check offset for NaN
+            elemGroup.offset = parseInt(elemGroup.offset, 10) === parseInt(elemGroup.offset, 10) 
+            ? parseInt(elemGroup.offset, 10) : 0; //check offset for NaN
             
-            groupOfElements[ classNameOfElements[j] ].animateWithTransitions = typeof elems[i].dataset.ecaAnimateWithTransitions !== "undefined" ? (elems[i].dataset.ecaAnimateWithTransitions.trim().toLowerCase() === "false" ? false : true) :
+            elemGroup.animateWithTransitions = typeof elemAttrs.dataset.ecaAnimateWithTransitions !== "undefined" ? (elemAttrs.dataset.ecaAnimateWithTransitions.trim().toLowerCase() === "false" ? false : true) :
             (typeof html.dataset.ecaAnimateWithTransitions !== "undefined" ? 
             (html.dataset.ecaAnimateWithTransitions.trim().toLowerCase() === "false" ? false : true) : false); //need to know this so we know what type of delay to set, animation vs transition delay
             
-            groupOfElements[ classNameOfElements[j] ].removeAnimationWhenNotInView = typeof html.dataset.ecaRemoveAnimationWhenNotInView !== "undefined" ? 
+            elemGroup.removeAnimationWhenNotInView = typeof html.dataset.ecaRemoveAnimationWhenNotInView !== "undefined" ? 
             (html.dataset.ecaRemoveAnimationWhenNotInView.trim().toLowerCase() === "false" ? false : true) : false; // global option, removes animation when not in view so element can animate again when in view
             
             //can't actually reverse array here since elements with class animated are gathered one
             //at a time into new array and this fn is called only after first elem is inserted
-            groupOfElements[ classNameOfElements[j] ].reversed = typeof elems[i].dataset.ecaReverse !== "undefined" ? 
-            (elems[i].dataset.ecaReverse.trim().toLowerCase() === "false" ? false : true) : false; 
+            elemGroup.reversed = typeof elemAttrs.dataset.ecaReverse !== "undefined" ? 
+            (elemAttrs.dataset.ecaReverse.trim().toLowerCase() === "false" ? false : true) : false; 
 
             //for below, use an eventListener to do something at animation end, start, or track with custom function, not set here but user defined in own javascript file
             //on elements of choice, must be called trackingFn
-            // groupOfElements[ classNameOfElements[j] ].trackingFn 
+            // elemGroup.trackingFn 
             
         }
         
@@ -529,7 +522,12 @@ was added).
             var currentStyles = elems.getAttribute("style");
             var newStyles = stylesToChange[event];
             
-            elems.setAttribute("style", currentStyles + " ; " + newStyles); 
+            //can't set styles here via rAF like we do inside requestAnimationUpdate fn
+            //because if event handler code ran at the same place in the frame's life cycle
+            //we could run into a situation where we're trying to remove the animation from 
+            //the element but then right after the hanlder code runs and sets some new style 
+            //that makes it appear the element is stuck in its final animationend state. 
+            elems.setAttribute("style", currentStyles + " ; " + newStyles);  
             
         }
         
@@ -735,7 +733,7 @@ was added).
             if ( (elems[j].inView || elems.playOnLoad || ( elems.animateAllOnFirstSight && elems.visible ) ) && !elems[j].animated ) 
             {
             
-                //var encapsulates if logic of current block
+                //var below encapsulates if logic of current block
                 //used so we don't have to repeat in animate fn and to be more explicit what's going on 
                 elems[j].readyToAnimate = true; //set here because if elem if ready to have animation delay set, it's ready to animate
                 eca.animatable.setAnimationDelay(elems[j], animationDelay);
@@ -881,53 +879,27 @@ was added).
     */
     
     
-    //when DOM and all other resources are finished loading
-    eca.readyAll(function runAnimationsOnload()
-    {
-        
-        eca.animatable.requestAnimationUpdate(); //animate elements in view (note: readyElementsForAnimation called by this point)
-        
-        setTimeout(function()
-        {
-            
-            var html = document.querySelector('html'); 
-            //need this to prevent page jumping to right on reload.
-            //page may jump to right (even with overflow-x: hidden, browser dependent) because user may have absolutely positioned elements off screen to left and right that 
-            //animate back to center on scroll. We need all three below because certain broswers will only work with a certain one in exclusion of the rest 
-            //(e.g., for ie only document.body works; the rest are ignored);
-            html.scrollLeft = 0; 
-            document.documentElement.scrollLeft = 0; 
-            document.body.scrollLeft = 0; 
-            
-            
-        }, 100); //need to wrap in setTimeout because page will jump (not all browsers but some) fraction of sec after load and after scrollLeft set to 0; 
-        //100ms above is a bit arbitrary since page could jump more than a 100ms after load, but for most browsers/different loads tested this works fine
-    });
-    
-    //when DOM is finished loading
-    eca.ready(function animateVisibleElemsOnScroll()
+    //when the document has been fully loaded and parsed
+    eca.ready(function runInitialAnimations()
     {
         //grab all elems that have animations attached to them
         //and set some initial animation properties for them
         eca.animatable.readyElementsForAnimation(); 
         
-        //add animations to elements when in view or based on other conditions defined by user
+        eca.animatable.requestAnimationUpdate(); //run first animation update and animate elems in view
+        
+    });
+    
+    eca.ready(function animateVisibleElemsOnScroll()
+    {
         eca.helperFns.listenOnElem(window, 'scroll', eca.animatable.requestAnimationUpdate);
     });
     
-    eca.ready(function onResize()
+    eca.ready(function animateVisibleElemsOnResize()
     {
-        var html = document.querySelector('html'); 
-        
         eca.helperFns.listenOnElem(window, 'resize', eca.helperFns.throttle(function()
         {
             eca.appState.windowHeight = window.innerHeight; //update windowHeight on screen resize
-            //in case screen jumps to right on resize,
-            //which can happen if there are elements off screen 
-            //waiting to be animated
-            html.scrollLeft = 0;
-            document.documentElement.scrollLeft = 0; 
-            document.body.scrollLeft = 0; 
             
         }), 150);
         
