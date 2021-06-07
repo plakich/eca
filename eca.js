@@ -360,7 +360,11 @@ was added).
                j = classNameOfElements.length - 1; 
                groupOfElements[ classNameOfElements[j] ] = eca.helperFns.getElementsToArray("." + elemsToBeAnimated[i].classList[0]); //new array for new group of elements with same class name
                
-               groupOfElements[ classNameOfElements[j] ] = groupOfElements[ classNameOfElements[j] ].filter(function(elem) { return elem.className.indexOf('dont-animate') === -1 }); 
+               groupOfElements[ classNameOfElements[j] ] = groupOfElements[ classNameOfElements[j] ].filter(function(elem) 
+               { 
+                   //need this because SVGElement's className is an Object not String 
+                   return (elem instanceof SVGElement ? elem.className.baseVal.indexOf("dont-animate") : elem.className.indexOf("dont-animate") ) === -1;
+               }); 
                
                setAnimationProperties(elemsToBeAnimated); //e.g, props for, say, if animations are to be reset when scrolled out, use a stagger delay, etc.. 
                setListeners(groupOfElements[ classNameOfElements[j] ]); //set listeners from user defined json obj in html (e.g., {'"end": "display: inline"'} sets animation/iterationend event listener on elems)
