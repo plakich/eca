@@ -1,18 +1,12 @@
 /*
 
-Welcome to the source code for Enhanced/Easier CSS Animations (eca)! 
+Welcome to the source code for Enhanced/Easier CSS Animations (ECA)! 
 
-I had the idea for this app while working on my company's site,
-Storybook Websites, which had a lot of animation code. I was
+I had the idea for this app while working on previous sites,
+which had a lot of animation code. I was
 spending a bit too much time on animation work, so I came up with
 the idea for how to simplify dynamically adding animations 
 to elements (mostly on scroll when they appeared).
-
-As such, many of the functions below I took straight from that app
-and modified or rewrote. The readyElementsForAnimation function, for instance,
-since it was responsible for doing the main bulk of the "animation" work,
-was completely rewritten to automate how elements were selected from the DOM
-and grouped together into timelines for animation. 
 
 Whether you're using an animation library, or making animations yourself,
 most code for selecting elements and animating them takes the following form,
@@ -29,169 +23,639 @@ With this library there's no more of that!
 
 The main bulk of the functionality for this app
 is found in the readyElementsForAnimation 
-function and the functions private to it, where
+function and the functions it calls, where
 most of the above code is automated. 
-
-Note: This app was written using ES5 syntax, 
-and as such, the app should work on most older browsers
-back to IE10 (when the css 'animation' shorthand property 
-was added). 
 
 */
 
-
-    //a high level overview of the application
-    //in terms of features, also serves as 
-    //our app's namespace (eca = enhanced/easier css animations)
-    var eca = {
+    const eca = {
     
-        ready: function(callback)
+        ready: callback =>
         {
             if (document.readyState !== 'loading')
             {
                 callback();
             } 
-            else //wait for dom content to load first
+            else 
             {
                 document.addEventListener('DOMContentLoaded', callback);
             } 
         },
         animatable: { elementsToAnimate: [] },
-        appState: { windowHeight: window.innerHeight,  //so we can use this in scroll handlers without querying it every time (only updated on resize events)
-                    updating: false, //so when scroll and resize events fire at same time animations don't update twice
-                    groupDelayIds: [] //for canceling setTimeouts used in app to handle delaying animations for groups of elements
+        appState: { windowHeight: window.innerHeight,  // so we can use this in scroll handlers without querying it every time (only updated on resize events)
+                    updating: false, // so when scroll and resize events fire in same frame animations don't update twice
+                    groupDelayIds: {}, // for canceling setTimeouts used in app to handle delaying animations for groups of elements
+                    throttleLim: {resize: null, scroll: null}
         },
         helperFns: {}
 
     };
     
     
-    /*HELPER FUNCTIONS
+    /* HELPER FUNCTIONS
     ===================================================================*/
     
-    //generic event listener for a single DOM element
-    eca.helperFns.listenOnElem = function(obj, event, callback, useCapture)
+    // generic event listener for a single DOM obj
+    // @param {(Object | String)} - obj event listener should listen on
+    // @param {Event} event - event to listen for
+    // @param {Function} callback - func to run when event fires
+    // @param {Boolean} once - when true listener fires once and then is removed
+    eca.helperFns.listen = (obj, event, callback, once) =>
     {
         obj = typeof obj === 'string' ? document.querySelector(obj) : obj;
-        obj.addEventListener(event, callback, useCapture);
+        obj.addEventListener(event, callback, {once: once});
     };
     
-    //event listener for array of dom elements
-    eca.helperFns.listenOnAllElems = function(objs, event, callback, useCapture)
+    // event listener for array of DOM objs
+    eca.helperFns.listenAll = (objs, event, callback, once) =>
     {
-        objs = typeof objs === 'string' ? eca.helperFns.getElementsToArray(objs) : objs;
-        objs.forEach(function(obj)
+        objs = typeof objs === 'string' ? document.querySelectorAll(objs) : objs;
+        objs.forEach(obj =>
         {
-            eca.helperFns.listenOnElem(obj, event, callback, useCapture); 
+            eca.helperFns.listen(obj, event, callback, once); 
         });
     };
-   
-    eca.helperFns.getElementsToArray = function(queryString)
-    {
-        return [].slice.call( document.querySelectorAll(queryString) );
-    };
     
-    //standard throttle
-    //the last event to come in while function is in throttle
-    //is processed after throttle limit expires
-    eca.helperFns.throttle = function(func, limit)
+    // standard throttle.
+    // The last event to come in while function is in throttle
+    // is processed after throttle limit expires.
+    // @param {Function} func - func to run after throttle limit expires
+    // @param {Number} limit - how long to wait before running func again
+    // @returns {Function} throttleHandler 
+    eca.helperFns.throttle = (func, limit) =>
     {
         
-      var inThrottle = null;
-      var event = null; 
-      
-      var throttledHandler = function(e) 
-      {
-        var args = arguments;
-        var context = this;
+        let inThrottle = null;
+        let event = null; 
         
-        event = e; 
-        
-        if (!inThrottle) 
+        // closure that implements throttle functionality. If an event
+        // was fired while in a previous throttle, that event
+        // is processed by the handler after the previous throttle
+        // limit expires. 
+        // @param {Event (Object)} e - event to be passed to throttleHandler and
+        //     applied to func. Set equal to outer scope's event variable 
+        //     so we can track new events coming in while previous throttler 
+        //     is still running. 
+        const throttledHandler = function(e) 
         {
-            func.apply(context, args); //when used as callback in event listeners, context will be elem listener is set on
-            event = null; 
+            const args = arguments;
+            const context = this;
             
-            inThrottle = setTimeout(function()
+            event = e; 
+            
+            if (!inThrottle) 
             {
-              inThrottle = null; 
-              
-              if (event) 
-              {
-                  //have to call with context since setTimeout 
-                  //is executed in the global context here
-                  throttledHandler.call(context, event);
-              }
-              
-            }, limit); 
-        }
+                func.apply(context, args); 
+                event = null; 
+                
+                inThrottle = setTimeout(() =>
+                {
+                    inThrottle = null; 
+                    
+                    if (event) 
+                    {
+                        throttledHandler(event);
+                    }
+                  
+                }, limit); 
+            }
         
-      };
-      
-      return throttledHandler; 
-      
+        };
+        
+        return throttledHandler; 
     };
-    
     
     /* ANIMATION FUNCTIONS
     ==============================================================*/
     
-    
-    //checks if element is visible. takes an animatable html elem,
-    //and an optional triggerOffset (amount that offsets on screen 
-    //where element is considered in view).
-    eca.animatable.elementInView = function(elem, triggerOffset)
+    // custom properties each elem needs
+    // for ECA to work. Also helps avoid potential
+    // naming clashes with other libraries
+    // or native html element props. 
+    // @param {HTML Element} elem 
+    // @param {ECA ElemGroup} elemGroup 
+    eca.animatable.initializeElemProps = (elem, elemGroup) =>
     {
-        var windowHeight = eca.appState.windowHeight;
-        var elementCoords = elem.getBoundingClientRect();
-        elem.top = elementCoords.top;
-        elem.bottom = elementCoords.bottom;
+        const transitionBackOffset = elemGroup.animateWithTransitions ? elemGroup.offset : 0; 
+        
+        // add to ecaElemProps obj 
+        // so we don't clash with
+        // names (or future prop names) 
+        // on given elem interface. 
+        elem.ecaElemProps = {
+            top: null,
+            bottom: null,
+            delay: 0,
+            inView: false,
+            readyToAnimate: false,
+            animated: false,
+            /*
+                It may seem counterintuitive to have a var that 
+                lets us know when an elem is out of view, instead of just
+                using ! inView. However, the app decouples the in view
+                and not in view logic through the various options offered to users.
+                
+                For instance, we want to consider offset (for elements using animations)
+                when deciding when they come into view, but not when they go out of view. 
+                This is because animations simply revert/snap back to their original state
+                instead of reverting smoothly like transitions do. Hence we have to have separate
+                logic for when elems with animations attached leave the viewport. 
+                
+                Also, the users can choose when the animation will be removed from an element
+                by specifying one of three options for removeAnimationWhenNotInView (e.g., do
+                we want to remove the animation when the element is above or below the viewport,
+                or just below?). 
+            */
+            get atRemoveAnimationPoint()
+            {
+                if (elemGroup.removeAnimationWhenNotInView && elemGroup.removeAnimationWhenNotInView === true)
+                {
+                    return this.top + transitionBackOffset >= eca.appState.windowHeight || this.bottom - transitionBackOffset <= 0;
+                }
+                else if (elemGroup.removeAnimationWhenNotInView === "below") // when elem below viewport
+                {
+                    return this.top + transitionBackOffset >= eca.appState.windowHeight;
+                }
+                else if (elemGroup.removeAnimationWhenNotInView === "above")
+                {
+                    return this.bottom - transitionBackOffset <= 0;
+                } 
+            }
+        };
+    };
+    
+    // This class makes us an extension of Array but with useful 
+    // props ECA uses to operate. 
+    // @param {HTML Element} elem - first elem of a group we want to animate
+    //     (or parent element of text group we want to animate)
+    //     with useful dataset props for entire group.
+    // @param {String} groupId - id ECA uses to uniquely identify group
+    // @constructor -- sets custom properties on new ElemGroup.
+    eca.animatable.ElemGroup = function(elem, groupId)
+    {
+        // Get html so we can set global properties.
+        // Many properties have the option of setting a global property 
+        // while leaving the option to overriding the gloabl setting per element
+        const html = document.querySelector("html"); 
+        
+        const elemGroup = elem.classList.contains("eca-animate-chars") 
+            ? 
+                elem.getElementsByClassName("letter")
+            : 
+                elem.parentElement.getElementsByClassName( elem.classList[0] );
+        
+        this.groupId = groupId; 
+        this.delayMultiplier = eca.animatable.getDurationInMS(elem.dataset.ecaStagger || html.dataset.ecaStagger || "0ms"); // for staggered delay
+        
+        // setting this option will include zero as first multiple of delayMultiplier
+        this.delayFromZero = typeof elem.dataset.ecaStaggerFromZero !== "undefined" 
+            ? 
+                (elem.dataset.ecaStaggerFromZero.trim().toLowerCase() === "false" ? false : true) 
+            : 
+                (typeof html.dataset.ecaStaggerFromZero !== "undefined" 
+                    ? 
+                        (html.dataset.ecaStaggerFromZero.trim().toLowerCase() === "false" ? false : true) 
+                    : 
+                        false
+                ); 
+        
+        // duration of animation, not used in app but useful 
+        // if user wants to get the duration of the animation
+        // for custom tracking function without causing a style
+        // recalc. 
+        this.duration = eca.animatable.getDurationInMS(elem.dataset.ecaDuration || "0ms"); 
+        
+        // delay before any one elem of group animates (distinct from a css animation-delay). 
+        this.groupDelay = eca.animatable.getDurationInMS(elem.dataset.ecaGroupDelay || "0ms"); 
+        
+        // Save group delay so if removeAnimationWhenNotInView
+        // prop is set we can still have original delay,
+        // which is set to 0 once initial animation is completed. 
+        // Could keep groupDelay always set, but then elems in 
+        // a group that haven't animated yet will trigger
+        // another group delay. 
+        this.groupDelayOriginal = this.groupDelay;  
+        
+        // so we know not to run elements delaying through
+        // animation functions again. 
+        this.currentlyDelaying = false;
+        
+        // setTimeout id of a groupDelayed group.
+        // never used in the app but if the user
+        // wants to write some custom code, they may
+        // need this value. 
+        this.delayId = null; 
+        this.finishedAnimating = false; 
+        
+        // so we can know when elems are finished animating
+        this.numAnimated = 0; 
+        
+        // Play animation right away when page loads instead of on scroll.
+        // This is how css animations normally work. Basically, this tells ECA
+        // not to bother with scroll behavior, though we could still use ECA
+        // for delays. 
+        this.playOnLoad = typeof elem.dataset.ecaPlayOnLoad !== "undefined" 
+            ? 
+                (elem.dataset.ecaPlayOnLoad.trim().toLowerCase() === "false" ? false : true) 
+            : 
+                (typeof html.dataset.ecaPlayOnLoad !== "undefined" 
+                    ? 
+                        (html.dataset.ecaPlayOnLoad.trim().toLowerCase() === "false" ? false : true) 
+                    : 
+                        false
+                ); 
+                
+        // Should last element of group be first elem of animation or not?
+        // This option matters, for example, if we've set a staggered delay. 
+        this.playReversed = typeof elem.dataset.ecaReverse !== "undefined" 
+            ? 
+                (elem.dataset.ecaReverse.trim().toLowerCase() === "false" ? false : true) 
+            : 
+                false; 
+        
+        // If one element is in view, we animate all of the group regardless if user can see rest.
+        // Can be useful, for example, for title text of a section that wraps lines.
+        this.animateAllOnFirstSight = typeof elem.dataset.ecaAnimateAllOnFirstSight !== "undefined" 
+            ? 
+                (elem.dataset.ecaAnimateAllOnFirstSight.trim().toLowerCase() === "false" ? false : true)  
+            : 
+                (typeof html.dataset.ecaAnimateAllOnFirstSight !== "undefined" 
+                    ? 
+                        (html.dataset.ecaAnimateAllOnFirstSight.trim().toLowerCase() === "false" ? false : true) 
+                    : 
+                        false
+                ); 
+        
+        // because playOnLoad and animateAll options are mutually exclusive 
+        this.animateAllOnFirstSight = this.playOnLoad ? false : this.animateAllOnFirstSight; 
+        
+        // event listeners with associated styles to change on animation start, end, iteration, cancel. 
+        this.listen = elem.dataset.ecaListen; 
+        
+        // fire event listener once then remove it. 
+        this.listenOnce = typeof elem.dataset.ecaListenOnce !== "undefined" 
+            ?  
+                (elem.dataset.ecaListenOnce.trim().toLowerCase() === "false" ? false : true) 
+            : 
+                false; 
+                
+        // user defined offset (pixel offset for animation trigger point).
+        this.offset = typeof elem.dataset.ecaOffset !== "undefined" 
+            ? 
+                elem.dataset.ecaOffset 
+            : 
+                (typeof html.dataset.ecaOffset !== "undefined" 
+                    ? 
+                        html.dataset.ecaOffset 
+                    : 
+                        0
+                );  
+                
+        // check offset for NaN
+        this.offset = parseInt(this.offset, 10) === parseInt(this.offset, 10) 
+            ? 
+                parseInt(this.offset, 10) 
+            : 
+                0; 
+                
+        this.offset = eca.animatable.getMaxTriggerOffset(elemGroup[0], eca.appState.windowHeight, this.offset); 
+        
+        // need to know this so we know what type of delay to set, animation vs transition delay
+        this.animateWithTransitions = typeof elem.dataset.ecaAnimateWithTransitions !== "undefined" 
+            ? 
+                (elem.dataset.ecaAnimateWithTransitions.trim().toLowerCase() === "false" ? false : true) 
+            :
+                (typeof html.dataset.ecaAnimateWithTransitions !== "undefined" 
+                    ? 
+                        (html.dataset.ecaAnimateWithTransitions.trim().toLowerCase() === "false" ? false : true) 
+                    : 
+                        false
+                ); 
+        
+        // global option, removes animation when element is not visible so element can animate again when visible.
+        // Can take one of four values: false, true, above or below. When true, the animation is reset when elem
+        // is out of view above or below the viewport. When below is set, the animation is only reset when the elem
+        // is below the viewport, not above--vice versa for when above is set. 
+        this.removeAnimationWhenNotInView = typeof html.dataset.ecaRemoveAnimationWhenNotInView !== "undefined" 
+            ? 
+                (html.dataset.ecaRemoveAnimationWhenNotInView.trim().toLowerCase() === "false" 
+                    ? 
+                        false
+                    : 
+                        (html.dataset.ecaRemoveAnimationWhenNotInView.trim().toLowerCase() === "above" ||
+                        html.dataset.ecaRemoveAnimationWhenNotInView.trim().toLowerCase() === "below" 
+                            ?
+                                html.dataset.ecaRemoveAnimationWhenNotInView.trim().toLowerCase()
+                            :
+                                true)
+                )
+            : 
+                false; 
+        
+        // need to know if any part of elem group is visible (i.e., if any one elem is visible)
+        // so we know whether to use groupDelay in animate fn or not
+        this.visible = this.playOnLoad ? true : false; 
        
-        triggerOffset = eca.animatable.getMaxTriggerOffset(elem, windowHeight, triggerOffset);
+        // Below, we can use an eventListener to do something at animation end, start, or track with custom function.
+        // Not set here but user defined in own javascript file
+        // on elements of choice. Must be called trackingFn. 
+        this.trackingFn = null; 
         
-        //elem is visible when top or bottom is in range 0 to windowHeight inclusive
-        var elementInViewAbove = ( (elem.top + triggerOffset) <= windowHeight && elem.top >= 0);
-        var elementInViewBelow = ( (elem.bottom - triggerOffset) >= 0 && elem.bottom <= windowHeight);
-        var viewPortInsideElement = (elem.bottom > windowHeight && elem.top < 0);
+        for (let i = 0; i < elemGroup.length; i++)
+        {
+            // Object.assign so we don't create circular reference from elem back to 
+            // its group.
+            eca.animatable.initializeElemProps( elemGroup[i], Object.assign({}, this) ); 
+        }
         
-        elem.inView =  elementInViewAbove || elementInViewBelow || viewPortInsideElement; 
+        // so we can access all the ElemGroup properties 
+        // right on the array. 
+        Array.prototype.push.apply(this, elemGroup); 
+    };
+    
+    // so we can use any array methods we may
+    // need on our constructed array.
+    // Reminder: filter, map, and fns that return a new array 
+    // won't return our custom array props. Also, it's not a true 
+    // sub class of Array as you can't increase the length of the Array
+    // by assigning to undefined indices.
+    eca.animatable.ElemGroup.prototype = Object.create(Array.prototype);
+    
+    // for when animateAllOnFirstSight option is set with removeAnimation
+    // option. Since animateAllOnFirstSight animates the group as a whole, 
+    // removing the animation has to consider the group as a whole as well,
+    // and not any one element. 
+    eca.animatable.ElemGroup.prototype.atRemoveAnimationPoint = function()
+    {
+            // we only want to use an offset if we're using transitions, since animations
+            // will simply disappear when we remove them (revert to original state, say, with opacity 0)
+            // while transitions will transition back to their original state (reversing animation 
+            // direction does not work).
+            const transitionBackOffset = this.animateWithTransitions 
+                ? 
+                    this.offset
+                : 
+                    0; 
+                    
+            let atRemoveAnimationPoint = false;
+            
+            if (this.animateAllOnFirstSight && this.removeAnimationWhenNotInView)
+            {
+                // true removes animation when group is above or below viewport,
+                // so we have to consider element group like a single element 
+                // (i.e., it's top is elems[0].top and bottom is elems[elems.length -1].bottom)
+                if (this.removeAnimationWhenNotInView === true) 
+                {
+                    // not using ecaElemProps.atRemove.. here because that considers each side of elem
+                    // and here we need only one. 
+                    atRemoveAnimationPoint = this[this.playReversed ? this.length - 1 : 0].ecaElemProps.top + transitionBackOffset >= eca.appState.windowHeight 
+                        || this[this.playReversed ? 0 : this.length - 1].ecaElemProps.bottom - transitionBackOffset <= 0;
+                    
+                }
+                else if (this.removeAnimationWhenNotInView === "below")
+                {
+                    atRemoveAnimationPoint = this[this.playReversed ? this.length - 1 : 0].ecaElemProps.atRemoveAnimationPoint; 
+                }
+                else if (this.removeAnimationWhenNotInView === "above")
+                {
+                    atRemoveAnimationPoint = this[this.playReversed ? 0 : this.length - 1].ecaElemProps.atRemoveAnimationPoint; 
+                }
+            }
+            
+            return atRemoveAnimationPoint;
+    };
+    
+    eca.animatable.ElemGroup.prototype.constructor = eca.animatable.ElemGroup; 
+    
+    // text is split dynamically on page load (each letter 
+    // wrapped in span with class .letter), so here we must
+    // add the unique delays for each element after they're placed
+    // on page. (note: this fn doesn't actually set the delay, just
+    // adds the dataset.ecaDelay prop so it can later be set, which we do 
+    // so we don't cause a style recalc at an inappropriate time). 
+    // @param {HTML Element} textElem - some html element containing innerText
+    eca.animatable.addUniqueDelays = textElem =>
+    {
+        if (textElem.dataset.ecaCharDelays)
+        {
+            try // to parse JSON object
+            {
+                const delaysObj = JSON.parse(textElem.dataset.ecaCharDelays);
+                const textLetters = textElem.querySelectorAll(".letter");
+                
+                for (let k in delaysObj)
+                {
+                    if ( delaysObj.hasOwnProperty(k) && (k-1 <= textLetters.length) )
+                    {
+                        // k-1 because we take the perspective of a user
+                        // reading some text in the html, where it's more
+                        // natural to talk about the first char of a title/para/etc, 
+                        // rather than char zero. 
+                        textLetters[k-1].dataset.ecaDelay = delaysObj[k]; 
+                    }
+                }
+            }
+            catch (error)
+            {
+                console.error(error);
+                console.error("Please make sure the data-eca-char-delays object on " +
+                    textElem.classList[0] + " is properly formatted JSON.");
+            }
+            
+        }
         
     };
     
-    //triggerOffset is the amount in pixels we offset the top and bottom of an element by before it's considered visible
-    //Since the user can enter any number for offset (pixel value), the behavior of offset can be buggy dependent on
-    //window.innerHeight (which changes on resize) and element height (which can also change on resize), which
-    //setting a max offset prevents. 
-    //An elem is in-view when its top (or bottom) is in the range windowHeight and 0 inclusive, which 
-    //triggerOffset changes. So we do a test: we place an element in the center of the screen
-    //(windowHeight/2) and check one edge (at elemHeight/2 dist from center), adding offset to
-    //elem's top. If top + offset is greater than windowHeight then offset is too large (the element would
-    //then be out of view in the center of the screen, which is obviously a bug).
-    eca.animatable.getMaxTriggerOffset = function(elem, windowHeight, triggerOffset)
+    // set styles on elem at some point in animation
+    // e.g., start, end, iteration
+    // @param {HTML Element} elem 
+    // @param {String} newStyles - represents inline styles to set on elem.
+    eca.animatable.setStyles = (elem, newStyles) =>
     {
-        var elemHeight = 0;
+        const currentStyles = elem.getAttribute("style");
         
-        if(elem.bottom && elem.top) 
+        // can't set styles here via rAF like we do inside requestAnimationUpdate fn
+        // because if event handler code ran at the same place in the frame's life cycle
+        // we could run into a situation where we're trying to remove the animation from 
+        // the element but then right after the hanlder code runs and sets some new style 
+        // that makes it appear the element is stuck in its final animationend state. 
+        elem.setAttribute("style", currentStyles + " ; " + newStyles);  
+        
+    };
+
+    // set event listener on animatable elems 
+    // with handler that sets styles at some point in animation/transition.
+    // @param {ECA ElemGroup} - array of elements with props ECA uses
+    eca.animatable.setListeners = elemGroup =>
+    {
+        if (elemGroup.listen) // if user set event listeners via data-eca-listen attribute
         {
-            elemHeight = elem.bottom - elem.top; 
+            try // to parse listen obj
+            {
+                const listenerStyles = JSON.parse(elemGroup.listen);
+                
+                const stylesToChange = eca.animatable.getEventStyles(listenerStyles, elemGroup); 
+                
+                for (let event in stylesToChange)
+                {
+                    if (stylesToChange.hasOwnProperty(event))
+                    {
+                        eca.helperFns.listenAll(elemGroup, event, function(e)
+                        {
+                            // use 'this' check below because the capture/bubbling phase could trigger
+                            // the same event but on different element which we don't want
+                            if (this === e.target) 
+                            {
+                                eca.animatable.setStyles(this, stylesToChange[event]);
+                            }
+                            
+                        }, elemGroup.listenOnce);
+                       
+                    }
+                }
+            }
+            catch (error)
+            {
+                console.error(error);
+                console.error("Please make sure the data-eca-listen object on " + 
+                    elemGroup.groupId + " is properly formatted JSON.");
+            }
+        }
+        
+    }; 
+    
+    // Note: only reason we need this function is to make the user's life easier, so they don't have to
+    // type the full event name for the data-eca-listen attribute. They're much
+    // less likely to make mistakes this way as well. For example, it's very easy to mess up
+    // transitionstart by misspelling it or by using incorrect case (transitionStart). 
+    // By having them use only start or end, we're less likely to encounter those problems.
+    // @param {Object} listenerStyles - associates abbreviated event names with inline styles to set on each event
+    // @param {ECA ElemGroup} elemGroup - array of elements to set listeners on
+    // @returns {Object} stylesToChange - same object as listener styles but with unabbreviated event names
+    eca.animatable.getEventStyles = (listenerStyles, elemGroup) =>
+    {
+        const stylesToChange = {};
+        
+        for (let eventAbbrv in listenerStyles)
+        {
+            let event = ""; 
+            
+            if (listenerStyles.hasOwnProperty(eventAbbrv) && eventAbbrv !== "run" && eventAbbrv !== "iteration")
+            {
+                event = elemGroup.animateWithTransitions ? "transition" + eventAbbrv : "animation" + eventAbbrv; 
+                stylesToChange[event] = listenerStyles[eventAbbrv]; 
+            }
+            else if (listenerStyles.hasOwnProperty(event) && event === "run")
+            {
+                event = "transitionrun";
+                stylesToChange[event] = listenerStyles[eventAbbrv];
+            }
+            else if (listenerStyles.hasOwnProperty(event))
+            {
+                event = "animationiteration"; 
+                stylesToChange[event] = listenerStyles[eventAbbrv]; 
+            }
+        }
+        
+        return stylesToChange; 
+        
+    };
+    
+    // Checks if element is visible within the viewport. 
+    // @param {HTML Element} elem 
+    // @param {Number} triggerOffset - positive number to offset animation trigger point
+    //     (i.e., amount that offsets on screen where element is considered in view).
+    eca.animatable.elementInView = (elem, triggerOffset) =>
+    {
+        const windowHeight = eca.appState.windowHeight;
+        const elemCoords = elem.getBoundingClientRect();
+        
+        elem.ecaElemProps.top = elemCoords.top;
+        elem.ecaElemProps.bottom = elemCoords.bottom;
+       
+        triggerOffset = triggerOffset || eca.animatable.getMaxTriggerOffset(elem, windowHeight, triggerOffset);
+        
+        // elem is visible when top or bottom is in range 0 to windowHeight exclusive
+        const elemInsideViewport = (elem.ecaElemProps.top + triggerOffset) < windowHeight && (elem.ecaElemProps.bottom - triggerOffset) > 0;
+        const viewportInsideElem = (elem.ecaElemProps.bottom >= windowHeight && elem.ecaElemProps.top <= 0); // for when elem is larger than viewport
+        
+        elem.ecaElemProps.inView =  elemInsideViewport || viewportInsideElem; 
+    };
+    
+    /*
+        TriggerOffset is the amount in pixels we add or subtract to the top or bottom of an element before it's considered visible.
+        Since the user can enter any number for offset (pixel value), the behavior of offset can be buggy dependent on
+        window.innerHeight (which changes on resize) and element height (which can also change on resize), which
+        setting a max offset prevents. 
+        
+        An elem is visible when any one pixel of it is in the range windowHeight to 0 exclusive, which 
+        triggerOffset changes. So the question becomes, how many pixels can an element travel within the
+        range windowHeight to 0 and still be visible (i.e., what's its visibility range)? 
+        Well, the first pixel of its visibility is when it's top (getBoundingClientRect().top)
+        is at windowHeight - 1 and last pixel of visibility is when its bottom is at 1. For a 500px height elem
+        in a 1000px windowHeight screen, that's 1500px - 2px it can "travel" and still be considered visible. 
+        
+        So to get an element's visibility range (its travel range, t) we use the following formula: take the value
+        of the first pixel of visibility minus the last pixel and add that to the element's height.
+        
+        Without offset that's simple, since the first visible pixel is always at windowHeight - 1 and the
+        last at 1. With offset, the formula becomes (ignoring the -2px, which we'll add back at the end)
+        
+        t = ( (windowHeight - offset) - (0 + offset) ) + elem height. 
+        
+        or 
+        
+        t = windowHeight - 2*offset + elem height. 
+        
+        We want to know when t is 0, when the element will be visible but can not travel a single 
+        pixel before it's not visible again. So we solve for when t=0 in the above formula
+        which gives us: 
+        
+        0 = w -2offset + elemH. or  (w + elemH)/2 = maxOffset. or (w - 2 + elemHeight)/2 = maxOffset
+        
+        The elem's center will always be at the center of the screen at this point. (If we allowed negative
+        values for t, the elem would never be visible, which is obviously a bug.) However, this makes
+        for a pretty confusing user experience if we allow a max offset, since it's not realistic
+        that a user will ever scroll in a way that allows for seeing the element at all. 
+        
+        Also, elements that are flush with the bottom of the document can never have more than 
+        their height as the offset, since the document isn't scrollable past that amount. For this reason,
+        ECA makes an elem's height the max offset for any element. 
+        
+        @param {HTML Element} elem 
+        @param {Number} windowHeight - positive number, same as window.innerHeight
+        @param {Number} triggerOffset - positive number to offset animation trigger point
+        @returns {Number} maxTriggerOffset - positive number representing user entered trigger offset
+            or, if that's too large, at most elem's height. 
+    */
+    eca.animatable.getMaxTriggerOffset = (elem, windowHeight = eca.appState.windowHeight, triggerOffset) =>
+    {
+        let elemHeight = 0;
+        
+        if (elem.ecaElemProps && elem.ecaElemProps.bottom && elem.ecaElemProps.top) 
+        {
+            elemHeight = elem.ecaElemProps.bottom - elem.ecaElemProps.top; 
         }
         else
         {
             elemHeight = elem.getBoundingClientRect().bottom - elem.getBoundingClientRect().top;
         }
         
-        var maxTriggerOffset = Math.floor( (elemHeight)/2 + windowHeight/2 ); 
+        // minus 1 for edge case where element is 1px less
+        // than viewport (e.g., 501 viewport Height and 500 elem height)
+        const maxTriggerOffset = elemHeight - 1;
         
-        return  triggerOffset > maxTriggerOffset ? maxTriggerOffset : triggerOffset; 
-        
+        return  triggerOffset > maxTriggerOffset ? maxTriggerOffset : Math.abs( triggerOffset ); 
     };
 
-
-    //get duration of animation duration or delay
-    //always returns ms value
-    eca.animatable.getDurationInMS = function(duration)
+    // get duration of animation duration or delay.
+    // @param {Number} duration - in seconds or milliseconds
+    // @returns {Number} timeInMilliseconds - duration in
+    //     milliseconds. 
+    eca.animatable.getDurationInMS = duration =>
     {
-        var timeInMilliseconds = 0;
+        let timeInMilliseconds = 0;
+        
         if (duration.indexOf('ms') !== -1) //duration already in ms
         {
             timeInMilliseconds = parseFloat(duration);
@@ -208,673 +672,449 @@ was added).
         return timeInMilliseconds;
     };
     
-    
-    //get individual span wrapped letters (with class letter) of a text element
-    //function also accounts for nested tags 
-    //(e.g., text inside a paragraph tag with nested text inside an anchor tag)
-    //this function is needed because when we animate single letters inside some tag
-    //(e.g., h2, p, etc), we need to get the children (i.e., single letters wrapped in spans)
-    //inside tags, which could themselves be nested tags of some sort
-    //
-    // @PARAMS
-    //    elem: a text node (h1, p, etc) with wrapped (in divs and spans) text
-    //   
-    // returns: array of spans with class letter, each containing a letter of the text node
-    eca.animatable.getLetters = function(elem) // Note: can make fn more general to allow for getting words, lines, or letters
+    // Wrap text of some innerHTML in divs and spans.
+    // Words are wrapped in divs, and letters in spans.
+    // Any existing html tags inside innerHTML are rearranged
+    // to respect newly inserted divs and spans (so html is still valid).
+    // Text is wrapped so we can animate single letters or 
+    // whole words.
+    // @param {HTML Element} elem - elem with text of some sort.
+    // Note: fn does not return anything but sets new innerHTML of original 
+    // elem. 
+    eca.animatable.wrapText = elem =>
     {
+        // Separate html into word groups (in array) with 
+        // accompanying html tags, if any.
+        // Reminder: order of 'or's (|) in
+        // regex matters. 
+        const words = !!elem.innerHTML.match(/\S+<.+?>|<.+?>|\S+/g)
+            ?
+                elem.innerHTML.match(/\S+<.+?>|<.+?>|\S+/g)
+            : 
+                []; // for elems with empty innerHTML
         
-        var letters = [];
-        var newLetters = [];
-        
-        if (window.HTMLCollection.prototype.isPrototypeOf(elem.children)) //if children are an html collection
+        // wrap letters of each word in span,
+        // and word itself in div.
+        for (let i = 0; i < words.length; i++)
         {
-            letters = [].slice.call(elem.children); //so we can iterate over collection
-            
-            for (var i = 0; i < letters.length; i++)
-            {
-                if (letters[i].classList[0] === "letter" && letters[i].tagName.toLowerCase() === 'span') 
-                {
-                    newLetters.push(letters[i]);
-                }
-                else //get letters inside the tag that is a sibling of but not a span (e.g., more spans inside of the anchor tag that's next to other spans)
-                {
-                    var tempLetters = eca.animatable.getLetters(letters[i]);
+            // rip out HTML tags from word,
+            // if any
+            const innerText = words[i].split(/<.+?>/g)[0] === words[i]
+                ? 
+                    // using positive lookahead,
+                    // like split("") but respects surrogate pairs
+                    words[i].split(/(?=[\s\S])/u)
+                : 
+                    words[i].split(/<.+?>/g); 
                     
-                    if (tempLetters.length > 0) 
-                    {
-                        newLetters.push.apply(newLetters, tempLetters); //spread out array values and push each into array;
-                    }
-                   
-                }
+            const htmlTags = words[i].match(/<.+?>/g);
+            
+            // need to build string outside element's .innerHTML because once you place a tag into some innerHTML,
+            // a closing tag will automatically be inserted next to it, which isn't what we want. 
+            let wrappedLetters = "";
+            
+            // Note: reason below code works is 
+            // because match and split closely complement 
+            // each other regarding tag placement in some string.
+            // I.e., for each index of array returned by split (using html tag as split param)
+            // match (using html tag as param) will give us the tag 
+            // that split/delimited each index from the next. 
+            for (let i = 0, j = 0; i < innerText.length; i++)
+            {
+                // if we don't get a match for replace below,
+                // we still might get an htmlTag to be added to
+                // newHTML str. 
+                wrappedLetters += innerText[i].replace(/\S/g, 
+                '<span class="letter" style="display: inline-block">$&</span>') + 
+                    (htmlTags && typeof htmlTags[j] !== 'undefined' ? htmlTags[j++] : ''); 
             }
+            
+            // we need to grab html tags surrounding each
+            // letter span and move them outside the word div. 
+            // The regex we use here ensures we'll only ever have
+            // two substrings returned from the split (the outer html tags).
+            // (using ["|'] here so if I later rewrite the code below
+            // I won't have to remember to use either single or double quotes.)
+            const outerHTMLTags = wrappedLetters.split(/<span class=["|']letter["|'].+>\S<\/span>/g);
+            
+            // reminder: split will return wrappedLetters itself
+            // if no match (hence no letters in 'word,' only
+            // an html tag)
+            if (outerHTMLTags[0] === wrappedLetters)
+            {
+                words[i] = wrappedLetters;
+            }
+            else // we have outer tags, so move to outside word div
+            {
+                
+                // Reason we have to rip out outer tags and place outside word
+                // can be illustrated with an example. Suppose we were
+                // given the following input for this fn (e.g., this would be the innerHTML of an h1)
+                // <span class="red">I am</span>.
+                // After running this through our wrapText fn 
+                // we'd get the following if we didn't
+                // move the red span tag outside the word tags:
+                // <div class="word"><span class="red">
+                // <span class="letter">I</span></div> <div class="word"> ... </span> <--- this is the end of red
+                // Basically, the span would start inside one div tag and
+                // end inside another, which is not valid HTML.
+                // Inserting that inside some innerHTML would see
+                // a closing tag for the span automatically inserted
+                // inside the div (the dom parser does this).
+                
+                // first rip out tags that need to be moved
+                wrappedLetters = wrappedLetters.substring(
+                    wrappedLetters.indexOf(outerHTMLTags[0]) + outerHTMLTags[0].length, wrappedLetters.length);
+                    
+                wrappedLetters = wrappedLetters.substring(0, wrappedLetters.lastIndexOf(outerHTMLTags[1]));
+                
+                // Using aria=hidden to hide word from screen readers. This is because some will try to read/enunciate 
+                // each individual span wrapped letter. See further below where we set aria label for whole group.
+             
+                words[i] = 
+                    outerHTMLTags[0] + 
+                        '<div class="word" aria-hidden="true" style="position: relative; display: inline-block">' +
+                            wrappedLetters +
+                        '</div>' +
+                    outerHTMLTags[1];
+                
+            }
+    
         }
         
-        return newLetters;
-    };
+        // set aria-label to be the text of elem itself
+        elem.setAttribute("aria-label", elem.innerText); 
+        
+        elem.innerHTML = words.join(" ");  
     
-    //wrap text (p tags, h tags, etc) in divs and spans.
-    //words are wrapped in divs, and letters in spans
-    //text is wrapped so we can animate single letters or 
-    //whole words
-    //@PARAMS
-    // groupsOfLetters: an array where each element is a 
-    // text element of some sort (e.g., h1, p, etc)
-    eca.animatable.wrapText = function(groupsOfLetters)
+    }; 
+    
+    // This function is the first step to our animation pipeline.
+    // Animating an element on scroll is as simple as defining the
+    // animation for the element in css with an .eca-animated (past tense) class,
+    // and then adding .eca-animate to the first of some group you want animated.
+    // This function does the rest (selecting elements, configuring ECA props, sorting, etc). 
+    eca.animatable.readyElementsForAnimation = () =>
     {
+        // elements with same className will be part of same animation timeline/group.
+        // (e.g., elements are always animated as part of a group, 
+        // even if it's a single elem, since that single elem will
+        // still be part of an array/group)
+        const groupsOfAnimatableElems = { }; 
         
-        groupsOfLetters.forEach(function(group)
+        // All eca-dataset properties live on the first elem
+        // of each animatable group, which we need to grab the rest of. 
+        // In general, this is a big distinction to keep in mind in the app: the
+        // difference between an elem and an elemGroup (made of one or more elems),
+        // and properties defined per elem and per group. 
+        const firstElemsOfGroups = document.querySelectorAll(".eca-animate, .eca-animate-chars");
+        
+        // By convention groupId is the first class of classList (classList[0]),
+        // and not from the elem's id attr. 
+        // When animating chars, we tack on -letters to the end to distinguish
+        // them from non text animating elems. 
+        let groupId = ""; 
+       
+        for (let i = 0; i < firstElemsOfGroups.length; i++)
         {
+            const isText = firstElemsOfGroups[i].classList.contains("eca-animate-chars"); 
             
-            //need to push group to array because fn wraptext expects array of letters
-            //and we might call it recursively below
-            var wordArray = [];
-            wordArray.push(group);
-        
-            group.setAttribute('aria-label', group.innerText); //set aria-label to be the text of group itself, since individual span wrapped letters will be ignored by screen readers
-            
-            if (group.innerHTML.match(/<.+?>/g) !== null) //if html has tags in it and not just text, we must rip tags out else the span will wrap around tags too
-            {
-                //not an exhaustive list of void elems, but commonly used ones. Just for reference since matching /<.+?>/g regex matches those anyway
-                //var voidElements = group.innerHTML.match(/<(img|br|\/br|br\/|br \/|hr|input).+?>/g);
+            groupId = 
+                // do we already have a group with this class name/groupId? 
+                typeof groupsOfAnimatableElems[ firstElemsOfGroups[i].classList[0] + (isText ? "-letters" : "") ]  === "undefined"
                 
-                var cleanHTML = group.innerHTML.split(/<.+?>/g); // find html tags (eg. <a> <br> etc, within heading or paragraph text) and split remaining text at those tags
-                var htmlTags = group.innerHTML.match(/<.+?>/g);
-                var newHTML = "";
-                
-                if ( group.innerHTML.match(/<div/g) === null  ) // if no divs
-                {
-                    
-                    //build new innerHTML from cleanHTML with words wrapped in divs
-                    //and htmlTags inserted back into original positions
-                    for (var i = 0, j = 0; i < cleanHTML.length; i++)
-                    {
-                        newHTML += cleanHTML[i].replace(/\S+/g, 
-                        '<div class="word" aria-hidden="true" style="position: relative; display: inline-block">$&</div>') + 
-                        (typeof htmlTags[j] !== 'undefined' ? htmlTags[j++] : ''); 
-        
-                    }
-                    group.innerHTML = newHTML; //replace group's old innerHtml with the new wrapped one
-                    eca.animatable.wrapText(wordArray);
-                   
-                }
-                else //words already wrapped in divs, so wrap letters in spans
-                {
-                    //same as with divs above but now we wrap each letter in a span
-                    for (i = 0, j = 0; i < cleanHTML.length; i++)
-                    {
-                        newHTML += cleanHTML[i].replace(/\S/g, 
-                        '<span class="letter" aria-hidden="true" style="display: inline-block">$&</span>') + 
-                        (typeof htmlTags[j] !== 'undefined' ? htmlTags[j++] : ''); 
-        
-                    }
-                    
-                     group.innerHTML = newHTML;
-                }
-                
-              
-                //need to build string inside newHTML string because once you place a tag into some innerHTML
-                //closing tag will automatically be inserted next to it, which isn't what we want. 
-               
-                
-            }
-            else // no tags, so just wrap words of text in divs
-            {
-               
-                group.innerHTML = group.innerHTML.replace(/([^\s]+)/g, 
-                '<div class="word" aria-hidden="true" style="position: relative; display: inline-block">$&</div>');
-                eca.animatable.wrapText(wordArray);
-                
-            }
+                    ?
+                        firstElemsOfGroups[i].classList[0] + (isText ? "-letters" : "")
+                    :
+                        // Same class name, but user added them again.
+                        // This is useful, for example, if we have a class
+                        // .card, and have multiple card groups
+                        // we want animated across different sections.
+                        // Since .card className has already been added
+                        // we need to tack on a unique identifier (i) 
+                        // here to distinguish it from the previous .card
+                        // group(s). 
+                        firstElemsOfGroups[i].classList[0] + (isText ? "-letters" : "") + i;
             
-        });
-    
-    };
-    
-    
-    //This function is the first step to our animation pipeline.
-    //Animating an element on scroll is as simple as defining the
-    //animation for the element in css with an .animated (past tense) class.
-    //Then we select elements with the .animate (present tense) class,
-    //sort them into groups (arrays) of like elements,
-    //configure various animation properties for them,
-    //and push them into the elementsToAnimate array.
-    //The rest of the work is carried out for us by other 
-    //animation functions. 
-    eca.animatable.readyElementsForAnimation = function()
-    {
-        
-        var elemsToBeAnimated = eca.helperFns.getElementsToArray(".animate"); //animate class is set per group of elems
-        var classNameOfElements = []; //list of each animatable elements' class name, which serves as identifier for an element group
-        var groupOfElements = { }; //elements with same className will be part of same animation timeline
-        
-        // 1.
-        //go through list of elements targeted for animation
-        //and sort into like groups (e.g., elements are either 
-        //animated as part of a group or alone if it's a single elem)
-        for (var i = 0, j = 0; i < elemsToBeAnimated.length; i++)
-        {
-           
-           if (typeof groupOfElements[ elemsToBeAnimated[i].classList[0] ] === "undefined") //if no group with that name exists, start new group of elements with unique group name 
-           {
-               classNameOfElements.push( elemsToBeAnimated[i].classList[0] ); //add new class-name to list, which is always the first class of the element's classList
-               j = classNameOfElements.length - 1; 
-               groupOfElements[ classNameOfElements[j] ] = eca.helperFns.getElementsToArray("." + elemsToBeAnimated[i].classList[0]); //new array for new group of elements with same class name
-               
-               groupOfElements[ classNameOfElements[j] ] = groupOfElements[ classNameOfElements[j] ].filter(function(elem) 
-               { 
-                   //need this because SVGElement's className is an Object not String 
-                   return (elem instanceof SVGElement ? elem.className.baseVal.indexOf("dont-animate") : elem.className.indexOf("dont-animate") ) === -1;
-               }); 
-               
-               setAnimationProperties(elemsToBeAnimated); //e.g, props for, say, if animations are to be reset when scrolled out, use a stagger delay, etc.. 
-               setListeners(groupOfElements[ classNameOfElements[j] ]); //set listeners from user defined json obj in html (e.g., {'"end": "display: inline"'} sets animation/iterationend event listener on elems)
-               
-           }
-           else 
-           {
-               //do nothing, since this element group is already part of array and the user probably forgot they
-               //added them twice
-           }
-            
-        }
-        
-        // 2. 
-        //same as above but now we grab text elements to animate
-        var textElements = eca.helperFns.getElementsToArray('.animate-chars');
-        eca.animatable.wrapText( textElements ); //group letters of text nodes into word and letters, and wrap each in divs and spans respectively
-        
-        for (i = 0; i < textElements.length; i++)
-        {
-            if (typeof groupOfElements[ textElements[i].classList[0] + "-letters" ] === "undefined") 
-            {
-                classNameOfElements.push( textElements[i].classList[0] + "-letters" ); 
-                j = classNameOfElements.length - 1; 
-                groupOfElements[ classNameOfElements[j] ] = eca.animatable.getLetters(textElements[i]); 
-                
-                setAnimationProperties(textElements);
-                addUniqueDelays(textElements); //since text is wrapped in new elements after page load, we need to add delays afterwards too
-                setListeners(groupOfElements[ classNameOfElements[j] ]);
-            }
-            else //same class name for group of letters, but it's a new group so push it into it's own array and give unique identifier
-            {
-                classNameOfElements.push( textElements[i].classList[0] + "-letters" + i ); //add new className to list, i is unique identifier
-                j = classNameOfElements.length - 1; 
-                groupOfElements[ classNameOfElements[j] ] = eca.animatable.getLetters(textElements[i]); //add new array for new group of elements
-                
-                setAnimationProperties(textElements);
-                addUniqueDelays(textElements);
-                setListeners(groupOfElements[ classNameOfElements[j] ]);
-            }
-            
-        }
-        
-        //finally, place all element groups in array to iterate over
-        for (i = 0; i < classNameOfElements.length; i++)
-        {
-            eca.animatable.elementsToAnimate.push( groupOfElements[ classNameOfElements[i] ].reversed 
-            ? groupOfElements[ classNameOfElements[i] ].reverse() : groupOfElements[ classNameOfElements[i] ] );
-        }
-        
-        
-        //functions below are private to readyElementsForAnimation
-        //since readyElemsForAnimation is only called once (domContentLoaded)
-        //the below will only be defined once (reminder: i and j vals as referenced in 
-        //each function below will be the values at time of call at that point in 
-        //readyElementsForAnimation fn)
-        
-        //this fn sets properties on elems with corresponding dataset attributes 
-        //set for them. fn uses groupOfElements obj and classNameOfElements array defined in
-        //enclosing readyElementsForAnimation fn
-        function setAnimationProperties(elems) 
-        {
-            //for getting global properties
-            //many properties have the option of setting a global property 
-            //while leaving the option to overriding the gloabl setting per element
-            var html = document.querySelector("html"); 
-            var elemGroup = groupOfElements[ classNameOfElements[j] ]; //array of animatable elems
-            var elemAttrs = elems[i]; //could've just used elemGroup[0] if not for text elems since dataset lives on parent for those
-            
-            //non-numeric keys of array obj are simply skipped over during 
-            //iteration and length property ignores them
-            elemGroup.elemsIdentifier = classNameOfElements[j];  
-            elemGroup.delayMultiplier = eca.animatable.getDurationInMS(elemAttrs.dataset.ecaStagger || html.dataset.ecaStagger || "0ms"); //delay multiplier for staggered delay
-            elemGroup.delayFromZero = typeof elemAttrs.dataset.ecaStaggerFromZero !== "undefined" ? (elemAttrs.dataset.ecaStaggerFromZero.trim().toLowerCase() === "false" ? false : true) : 
-            (typeof html.dataset.ecaStaggerFromZero !== "undefined" ? 
-            (html.dataset.ecaStaggerFromZero.trim().toLowerCase() === "false" ? false : true) : false); //setting this option will include zero as first multiple of delayMultiplier
-            
-            elemGroup.duration = eca.animatable.getDurationInMS(elemAttrs.dataset.ecaDuration || "0ms"); //duration of animation
-            elemGroup.groupDelay = eca.animatable.getDurationInMS(elemAttrs.dataset.ecaGroupDelay || "0ms"); //delay for group of elements as a whole
-            
-            elemGroup.finishedAnimating = false; 
-            elemGroup.numAnimated = 0; //so we can know when elems are finished animating
-            elemGroup.playOnLoad = typeof elemAttrs.dataset.ecaPlayOnLoad !== "undefined" ? (elemAttrs.dataset.ecaPlayOnLoad.trim().toLowerCase() === "false" ? false : true) : 
-            (typeof html.dataset.ecaPlayOnLoad !== "undefined" ? (html.dataset.ecaPlayOnLoad.trim().toLowerCase() === "false" ? false : true) : false); //play animation right away when page loads instead of on scroll
-            
-            elemGroup.animateAllOnFirstSight = typeof elemAttrs.dataset.ecaAnimateAllOnFirstSight !== "undefined" ? 
-            (elemAttrs.dataset.ecaAnimateAllOnFirstSight.trim().toLowerCase() === "false" ? false : true)  : 
-            (typeof html.dataset.ecaAnimateAllOnFirstSight !== "undefined" ? 
-            (html.dataset.ecaAnimateAllOnFirstSight.trim().toLowerCase() === "false" ? false : true) : false); //if one element is in view, animate all regardless if user can see rest 
-            
-            elemGroup.animateAllOnFirstSight = elemGroup.playOnLoad ? !elemGroup.playOnLoad :
-            elemGroup.animateAllOnFirstSight; //because playOnLoad and animateAll options are mutually exclusive 
-            
-            elemGroup.listen = elemAttrs.dataset.ecaListen; //event listeners and callbacks for animation start, end, iteration, cancel. 
-            elemGroup.capture = typeof elemAttrs.dataset.ecaCapture !== "undefined" ?  
-            (elemAttrs.dataset.ecaCapture.trim().toLowerCase() === "false" ? false : true) : false; //can set capture to true if user wants event listener to fire during capture phase
-            
-            elemGroup.offset = typeof elemAttrs.dataset.ecaOffset !== "undefined" ? elemAttrs.dataset.ecaOffset : 
-            typeof html.dataset.ecaOffset !== "undefined" ? html.dataset.ecaOffset : 0; //user defined offset (pixel offset for animation trigger point). 
-            
-            elemGroup.offset = parseInt(elemGroup.offset, 10) === parseInt(elemGroup.offset, 10) 
-            ? parseInt(elemGroup.offset, 10) : 0; //check offset for NaN
-            
-            elemGroup.animateWithTransitions = typeof elemAttrs.dataset.ecaAnimateWithTransitions !== "undefined" ? (elemAttrs.dataset.ecaAnimateWithTransitions.trim().toLowerCase() === "false" ? false : true) :
-            (typeof html.dataset.ecaAnimateWithTransitions !== "undefined" ? 
-            (html.dataset.ecaAnimateWithTransitions.trim().toLowerCase() === "false" ? false : true) : false); //need to know this so we know what type of delay to set, animation vs transition delay
-            
-            elemGroup.removeAnimationWhenNotInView = typeof html.dataset.ecaRemoveAnimationWhenNotInView !== "undefined" ? 
-            (html.dataset.ecaRemoveAnimationWhenNotInView.trim().toLowerCase() === "false" ? false : true) : false; // global option, removes animation when not in view so element can animate again when in view
-            
-            //can't actually reverse array here since elements with class animated are gathered one
-            //at a time into new array and this fn is called only after first elem is inserted
-            elemGroup.reversed = typeof elemAttrs.dataset.ecaReverse !== "undefined" ? 
-            (elemAttrs.dataset.ecaReverse.trim().toLowerCase() === "false" ? false : true) : false; 
+            isText && eca.animatable.wrapText( firstElemsOfGroups[i] );
 
-            //for below, use an eventListener to do something at animation end, start, or track with custom function, not set here but user defined in own javascript file
-            //on elements of choice, must be called trackingFn
-            // elemGroup.trackingFn 
+            groupsOfAnimatableElems[ groupId ] = new eca.animatable.ElemGroup( firstElemsOfGroups[i], groupId );
             
-        }
-        
-        //text is split dynamically on page load (each letter 
-        //wrapped in span with class .letter), so here we must
-        //add the unique delays for each element after they're placed
-        //on page. (note: this fn doesn't actually set the delay, just
-        //adds the dataset.ecaDelay prop so it can later be set in the 
-        //setAnimationDelay fn, which reads that prop). 
-        function addUniqueDelays(textElems)
-        {
-            if (textElems[i].dataset.ecaCharDelays)
-            {
-                try //to parse JSON object
-                {
-                    var delaysObj = JSON.parse(textElems[i].dataset.ecaCharDelays);
-                    var textLetters = [].slice.call(textElems[i].querySelectorAll(".letter")); 
-                    
-                    for (var k in delaysObj)
-                    {
-                        if ( delaysObj.hasOwnProperty(k) && (k-1 <= textLetters.length) )
-                        {
-                            textLetters[k-1].dataset.ecaDelay = delaysObj[k]; //k-1 because we assume char count starts at one
-                        }
-                    }
-                }
-                catch (error)
-                {
-                    console.error(error);
-                    console.error("Please make sure the data-eca-char-delays object on " + classNameOfElements[j] + " is properly formatted JSON.");
-                }
+            // since text is wrapped after page load (i.e., html altered), 
+            // we need to add delays afterwards too (on each elem's dataset prop, normally
+            // set from data-eca-delay attr in html)
+            isText && eca.animatable.addUniqueDelays( firstElemsOfGroups[i] );
+            
+            eca.animatable.setListeners( groupsOfAnimatableElems[ groupId ] );
+            
+            eca.animatable.elementsToAnimate.push( 
                 
-            }
-            
+                groupsOfAnimatableElems[ groupId ].playReversed 
+                
+                    ? 
+                        groupsOfAnimatableElems[ groupId ].reverse() 
+                    : 
+                        groupsOfAnimatableElems[ groupId ] 
+            );
         }
         
-        //set styles on elems at some point in animation
-        //e.g., start, end, iteration
-        function setStyles(elems, stylesToChange, event)
-        {
-            var currentStyles = elems.getAttribute("style");
-            var newStyles = stylesToChange[event];
-            
-            //can't set styles here via rAF like we do inside requestAnimationUpdate fn
-            //because if event handler code ran at the same place in the frame's life cycle
-            //we could run into a situation where we're trying to remove the animation from 
-            //the element but then right after the hanlder code runs and sets some new style 
-            //that makes it appear the element is stuck in its final animationend state. 
-            elems.setAttribute("style", currentStyles + " ; " + newStyles);  
-            
-        }
-        
-        //set event listener on animatable elems which sets styles at some point in animation/transition
-        function setListeners(elems)
-        {
-            if (elems["listen"]) //if user set event listeners on elems via data.listen attribute
-            {
-                try //to parse listen obj
-                {
-                    var stylesToChange = JSON.parse(elems["listen"]);
-                    var eventTypes = getEventTypes(stylesToChange, elems); 
-                    
-                    for (var event in eventTypes)
-                    {
-                        if (eventTypes.hasOwnProperty(event))
-                        {
-                            (function(event)
-                            {
-                                eca.helperFns.listenOnAllElems(elems, eventTypes[event], function listenerCb(e)
-                                {
-                                    if (this === e.target) //because the capture/bubbling phase could trigger the same event but on different element which we don't want
-                                    {
-                                        
-                                        setStyles(this, stylesToChange, event);
-                                        
-                                    }
-                                    
-                                }, elems["capture"]);
-                                
-                            })(event);
-                        }
-                    }
-                    
-                }
-                catch (error)
-                {
-                    console.error(error);
-                    console.error("Please make sure the data-eca-listen object on " + elems.elemsIdentifier + " is properly formatted JSON.");
-                }
-            }
-            
-        } //setListeners()
-        
-        
-        //@PARAMS
-        // --fnsToRun: object with keys representing event listeners to be set
-        // --elems: array of elements to set listeners on
-        //returns: eventsTypes obj with string values for transition or animation events 
-        function getEventTypes(stylesToChange, elems)
-        {
-            var eventTypes = {};
-            
-            for (var event in stylesToChange)
-            {
-                if (stylesToChange.hasOwnProperty(event) && event !== "run" && event !== "iteration")
-                {
-                    eventTypes[event] = elems.animateWithTransitions ? "transition" + event : "animation" + event; 
-                }
-                else if (stylesToChange.hasOwnProperty(event) && event === "run")
-                {
-                    eventTypes[event] = "transitionrun";
-                }
-                else if (stylesToChange.hasOwnProperty(event))
-                {
-                    eventTypes[event] = "animationiteration"; 
-                }
-            }
-            
-            return eventTypes; 
-            
-        }
-        
-        
-    }; //eca.animatable.readyElementsForAnimation()
+    }; 
     
-    
-    //fn helps to assist user in grabbing a specific element group 
-    //from the eca.animatable.elementsToAnimate array.
-    //not used in the app here but useful if user wants to provide their
-    //own tracking function for some elem array in eca.animatable.elementsToAnimate 
-    eca.animatable.getElementArray = function(elemsIdentifier)
+    // fn helps to assist user in grabbing a specific element group 
+    // from the eca.animatable.elementsToAnimate array.
+    // not used in the app here but useful if user wants to provide their
+    // own tracking function for some elem array in eca.animatable.elementsToAnimate 
+    // @param {String} groupId - unique id of element group ECA tracks. Id is always
+    //     first class of classList (note: must add -letters to class if animating letters).
+    // @returns {ECA ElemGroup} elemGroup - array of elements ECA is currently tracking. 
+    eca.animatable.getElementArray = groupId =>
     {
-        var elementGroup = [];
+        let elemGroup = [];
         
-        eca.animatable.elementsToAnimate.forEach(function(elemArr)
+        eca.animatable.elementsToAnimate.forEach(elemArr =>
         {
-            if(elemArr["elemsIdentifier"] === elemsIdentifier)
+            if (elemArr["groupId"] === groupId)
             {
-                elementGroup = elemArr; 
+                elemGroup = elemArr; 
             }
         });
         
-        return elementGroup; 
+        return elemGroup; 
     };
     
-    
-    //this is mainly called via scroll event listener on window to 
-    //see if animations should be played yet (i.e., if a group of elements
-    //meets certain conditions)
-    eca.animatable.requestAnimationUpdate = function()
+    // Our main entry point into our "animation" functions (see scroll and resize handlers)
+    eca.animatable.requestAnimationUpdate = () =>
     {
-        //need to check if updating because scroll and resize listeners use this handler and both
-        //can fire at the same time on resize events, giving us two updates in the same frame
-        if(!eca.appState.updating) 
+        // need to check if updating because scroll and resize listeners use this handler and both
+        // can fire at the same time on resize events, giving us two updates in the same frame
+        if ( !eca.appState.updating ) 
         {
             eca.appState.updating = true; 
             
-            eca.animatable.elementsToAnimate.forEach(
+            // below, we apply the read all then write all pattern to avoid layout thrashing
+            // and unnecessary updates
             
-                eca.animatable.ifElemsNeedAnimating.bind(null, eca.animatable.setDynamicAnimationProps)
-                           
-            ); //do batch reading of all elem coords  
+            eca.animatable.updateAnimations(eca.animatable.setDynamicAnimationProps); // do batch reading of all elem coords  
             
-            //do batch writing (change styles, add animation class, etc) at frame end
-            //which avoids style conflicts with, for instance, any event listeners set that change styles
-            requestAnimationFrame(eca.animatable.updateAnimations);
-            
-            //the read all then write all pattern above is used to avoid layout thrashing and 
-            //unnecessary updates
+            // do batch writing (change styles, add animation class, etc) at frame end
+            // which avoids style conflicts with, for instance, any event listeners set that change styles
+            requestAnimationFrame(() =>
+                {
+                     eca.animatable.updateAnimations(eca.animatable.animate);
+                     eca.appState.updating = false; 
+                }
+            );
             
         }
        
     };
     
-
-    eca.animatable.updateAnimations = function()
+    // fn runs func on each group of elements in elementsToAnimate Array.
+    // @param {Function} func
+    eca.animatable.updateAnimations = func =>
     {
-    
-        eca.animatable.elementsToAnimate.forEach(
-                
-            eca.animatable.ifElemsNeedAnimating.bind(null, eca.animatable.animate) 
-                
-        ); 
-          
-        eca.appState.updating = false; 
-                
-    };
-    
-    //another one-liner, just so we're not redefining functions on scroll each time
-    //(same reason I'm using partial applications for this inside forEach loops)
-    eca.animatable.ifElemsNeedAnimating = function(func, elems)
-    {
-        //only check if elems.finshedAnimating if removeAnimation is false because removing animation gives elems chance to animate again
-        if ( (elems.removeAnimationWhenNotInView || !elems.finishedAnimating) && !elems.currentlyDelaying)//currently delayed elems have had all processing done on them already and are awaiting animation
+        for (let i = 0; i < eca.animatable.elementsToAnimate.length; i++)
         {
+            const elemGroup = eca.animatable.elementsToAnimate[i];
             
-            func(elems);
-        
+            // only check if elems.finshedAnimating if removeAnimation is
+            // false because removing animation gives elems chance to animate again.
+            // Currently delayed elems have had all processing done on them already
+            // and are already awaiting animation.
+            if ( (elemGroup.removeAnimationWhenNotInView || !elemGroup.finishedAnimating) && !elemGroup.currentlyDelaying )
+            {
+                func(elemGroup);
+            }
         }
-        
+                
     };
     
-    
-    //@Params
-    // elem: one element of a group of related elements that have an animation attached to them
-    // animationDelay: this is a staggered delay, calculated by multiplying delayMuliplier by index i
-    // it's the default delay method used for animations in this app 
-    eca.animatable.setAnimationDelay = function(elem, animationDelay) 
+    // @param {HTML Element} elem - one element of a group of related elements that have an animation attached to them
+    // @param {Number} animationDelay - this is a staggered delay, calculated by multiplying delayMuliplier by index i.
+    //     (staggered delays are the default delay method used for animations in this app.)
+    eca.animatable.setAnimationDelayProp = (elem, animationDelay) =>
     {
-        //individual elems can also have a unique delay whether using staggered or constant delays
-        var delay = typeof elem.dataset.ecaDelay !== "undefined" ? eca.animatable.getDurationInMS(elem.dataset.ecaDelay) + "ms" : animationDelay + "ms";
+        // individual elems can also have a unique delay whether using staggered or constant delays (delays set via css)
+        const delay = typeof elem.dataset.ecaDelay !== "undefined" 
+            ? 
+                eca.animatable.getDurationInMS(elem.dataset.ecaDelay) + "ms" 
+            : 
+                animationDelay + "ms";
         
-        elem.delay = delay || 0 + "ms"; //store delay in variable so we don't cause a style recalc here
+        elem.ecaElemProps.delay = delay || 0 + "ms"; // store delay in variable so we don't cause a style recalc here
         
     };
     
     
-    //calc dynamic elem properties like position (to see if elem in view)
-    //and animation delay, which can change based on order of elems in a group
-    //and whether previous elems have been animated already or not
-    eca.animatable.setDynamicAnimationProps = function(elems)
+    // calc dynamic elem properties like position (to see if elem in view)
+    // and animation delay, which can change based on order of elems in a group
+    // and whether previous elems have been animated already or not
+    // @param {ECA ElemGroup} elems - group/array of html elems
+    eca.animatable.setDynamicAnimationProps = elems =>
     {
         elems.visible = false; 
         
-        for ( var i = 0; i < elems.length; i++)
+        // gets visibility of each elem and element group as a whole. 
+        for ( let i = 0; i < elems.length; i++ )
         {
-            if (!elems.playOnLoad) //because if we play animation on page load we don't care about element coordinates
+            if ( !elems.playOnLoad ) // because if we play animation on page load we don't care about element coordinates
             {
                 eca.animatable.elementInView(elems[i], elems.offset); 
             }
             
-            if (!elems.visible && elems[i].inView || elems.playOnLoad)
+            if ( !elems.visible && elems[i].ecaElemProps.inView || elems.playOnLoad )
             {
-                //need to know if any part of elem group is visible (i.e., if any one elem is visible)
-                //so we know whether to use groupDelay in animate fn or not
+                // need to know if any part of elem group is visible (i.e., if any one elem is visible)
+                // so we know whether to use groupDelay or not
                 elems.visible = true; 
             }
          
         }
         
-        var delayMultiplier = elems.delayMultiplier; 
+        const delayMultiplier = elems.delayMultiplier; 
         
-        //Garbage values such as " " will not affect animation delay set via style attribute
-        //since it's not a valid value, e.g., style="animation-delay=' ms'" does nothing, which we want if delayMult is 0
-        //meaning user has set a constant delay via css or doesn't want one
-        var animationDelay = delayMultiplier > 0 ? (elems.delayFromZero ? 0 : delayMultiplier) : " "; 
+        // Garbage values such as " " will not affect animation delay set via style attribute
+        // since it's not a valid value, e.g., style="animation-delay=' ms'" does nothing, which we want if delayMult is 0
+        // meaning user has set a constant delay via css or doesn't want one
+        let animationDelay = delayMultiplier > 0 ? (elems.delayFromZero ? 0 : delayMultiplier) : " "; 
         
-        for ( var i = (elems.delayFromZero ? 0 : 1), j = 0;
+        for ( let i = (elems.delayFromZero ? 0 : 1), j = 0;
             j < elems.length; j++, animationDelay = delayMultiplier > 0 ? delayMultiplier * i : " ") 
         {
-            
-            if ( (elems[j].inView || elems.playOnLoad || ( elems.animateAllOnFirstSight && elems.visible ) ) && !elems[j].animated ) 
+            if ( (elems[j].ecaElemProps.inView || elems.playOnLoad || ( elems.animateAllOnFirstSight && elems.visible ) ) 
+                && !elems[j].ecaElemProps.animated ) 
             {
             
-                //var below encapsulates if logic of current block
-                //used so we don't have to repeat in animate fn and to be more explicit what's going on 
-                elems[j].readyToAnimate = true; //set here because if elem if ready to have animation delay set, it's ready to animate
-                eca.animatable.setAnimationDelay(elems[j], animationDelay);
+                // prop below encapsulates if logic of current block
+                // used so we don't have to repeat in animate fn and
+                // to be more explicit what's going on.
+                elems[j].ecaElemProps.readyToAnimateAnimate = true; // because if elem if ready to have animation delay set, it's ready to animate
+                eca.animatable.setAnimationDelayProp(elems[j], animationDelay);
                 i++; 
                 
             }
             else 
             {
-                elems[j].readyToAnimate = false;
+                elems[j].ecaElemProps.readyToAnimateAnimate = false;
             }
            
         }  
     
     };
     
-    //add class animated with css animation defined for array of elems,
-    //(or remove class if element is below viewport out-of-sight), and 
-    //potentially do some work on them with a custom function (if user defined one)
-    eca.animatable.animate = function(elems) 
+    // add class eca-animated with css animation defined elems of array,
+    // (or remove class if element is below viewport out-of-sight), and 
+    // potentially do some work on them with a custom function (if user defined one)
+    // @param {ECA ElemGroup} elems - group/array of html elems
+    eca.animatable.animate = elems =>
     {
-        //here we delay elem group before we animate any of the elems
         if ( elems.groupDelay > 0 && elems.visible )
         {
             elems.currentlyDelaying = true;
-            elems.groupDelayOriginal = elems.groupDelay; //save delay before setting to zero
-           
+            elems.groupDelayOriginal = elems.groupDelay; 
+            
             elems.delayId = setTimeout(function delayGroup()
             {
+                eca.appState.groupDelayIds[elems.groupId] = null; 
                 
-                eca.animatable.setDynamicAnimationProps(elems); //get possible new positions for elems (user could've scrolled since delay start)
+                eca.animatable.setDynamicAnimationProps(elems); // get possible new positions for elems (user could've scrolled since delay start)
                 
-                //set groupDelay to 0 since groupDelay is only supposed to 
-                //be applied once to all elems as a whole
-                //and subsequent calls to animate, for unanimated elems in
-                //elems array, shouldn't delay as group again
+                // set groupDelay to 0 since groupDelay is only supposed to 
+                // be applied once to all elems as a whole
+                // and subsequent calls to animate, for unanimated elems in
+                // elems array, shouldn't delay as group again
                 elems.groupDelay = 0; 
                      
-                requestAnimationFrame(function animateAfterDelay() //jump out of this drawn out frame and animate in next
+                requestAnimationFrame(function animateAfterDelay() 
                 {
-                   eca.animatable.animate(elems);
-                   
-                   elems.currentlyDelaying = false;
+                    eca.animatable.animate(elems);
+                    
+                    elems.currentlyDelaying = false;
                 });
                
-            }, elems.groupDelay);
+            }, elems.groupDelay);   
             
-            //below is useful if user uses trackingFn on elems and needs to 
-            //cancel the elems' delay
-            eca.appState.groupDelayIds.push({elemsDelaying: elems.elemsIdentifier, delayId: elems.delayId}); 
+            // below is useful if user uses trackingFn on elems and wants to 
+            // cancel the group's delay
+            eca.appState.groupDelayIds[elems.groupId] = elems.delayId; 
            
         }
-        else //no group delay, animate right away
+        else // no group delay, animate right away
         {
-            //track animated elems 
-            //for purpose of running some cleanup or tracking function on 
-            //them 
-            var newlyAnimatedElems = []; 
+            // track animated elems 
+            // for purpose of running some cleanup or tracking function on 
+            // them 
+            const newlyAnimatedElems = []; 
             
-            //used when calculating when to remove animation (user defined).
-            //we only want to use an offset if we're using transitions, since animations
-            //will simply disappear when we remove them (revert to original state, say, with opacity 0)
-            //while transitions will transition back to their original state
-            var animateOutOffset = elems.animateWithTransitions ? 
-            eca.animatable.getMaxTriggerOffset(elems[0], eca.appState.windowHeight, elems.offset) : 0; 
-            
-            for (var i = 0; i < elems.length; i++)
+            // for animateAllOnFirstSight option, considers group as a whole. 
+            const groupAtRemoveAnimationPoint = elems.atRemoveAnimationPoint(); 
+                    
+            for (let i = 0; i < elems.length; i++)
             {
-                //a variety of factors can make an element ready to animate or not (but mostly it's when an elem comes into view)
-                //see setDynamicAnimationProps function to see complete logic for readyToAnimate
-                if ( elems[i].readyToAnimate )   
+                // a variety of factors can make an element ready to animate or not (but mostly it's when an elem comes into view)
+                // see setDynamicAnimationProps function to see complete logic for readyToAnimate
+                if ( elems[i].ecaElemProps.readyToAnimateAnimate )   
                 {
-                    //if delay is undefined, style.animation/transitionDelay will stay unaltered
+                    // if delay is undefined, style.animation/transitionDelay will stay unaltered
                     if (elems.animateWithTransitions)
                     {
-                        elems[i].style.transitionDelay = elems[i].delay;
+                        elems[i].style.transitionDelay = elems[i].ecaElemProps.delay;
                     }
                     else
                     {
-                        elems[i].style.animationDelay = elems[i].delay; 
+                        elems[i].style.animationDelay = elems[i].ecaElemProps.delay; 
                     }
-                    elems[i].classList.add('animated');
+                    
+                    elems[i].classList.add('eca-animated');
                     newlyAnimatedElems.push(elems[i]);
-                    elems[i].animated = true; 
-                    elems[i].readyToAnimate = false; //because it's animated, hence not readyToAnimate anymore
+                    elems[i].ecaElemProps.animated = true; 
+                    elems[i].ecaElemProps.readyToAnimateAnimate = false; // because it's animated, hence not readyToAnimate anymore
                     elems.numAnimated++; 
                     
-                }//below the !elem.inView && elem.top etc is a special case of an elem not being in view (i.e., viewport is above the element)
-                else if ( ( !elems[i].inView && elems[i].top + animateOutOffset > eca.appState.windowHeight ) && !elems.playOnLoad && !elems.animateAllOnFirstSight && elems[i].animated) 
-                {
-                   
-                    elems[i].classList.remove('animated');
-                    elems[i].animated = false;
-                    elems[i].style = "";
-                    elems.numAnimated--; 
-                   
                 }
-                else if (elems.animateAllOnFirstSight && elems.removeAnimationWhenNotInView && elems[i] === (elems.reversed ? elems[elems.length-1] : elems[0]) 
-                && (!elems[i].inView && elems[i].top + animateOutOffset > eca.appState.windowHeight) && elems.finishedAnimating)
+                else if ( elems.removeAnimationWhenNotInView && !elems.animateAllOnFirstSight && !elems.playOnLoad &&
+                     elems[i].ecaElemProps.animated && elems[i].ecaElemProps.atRemoveAnimationPoint ) 
                 {
-                   
-                    elems.forEach(function(elem) //remove animation for all elems in group when first elem goes out of view
+                    elems[i].classList.remove('eca-animated');
+                    elems[i].ecaElemProps.animated = false;
+                    elems[i].style = ""; 
+                    elems.numAnimated--; 
+                }
+                else if ( elems.animateAllOnFirstSight && elems.removeAnimationWhenNotInView && elems.finishedAnimating && groupAtRemoveAnimationPoint )
+                {
+                    elems.forEach(elem => // remove animation for all elems in group when first elem goes out of view
                     {
-                        elem.animated = false;
+                        elem.ecaElemProps.animated = false;
                         elem.style = "";
-                        elem.classList.remove("animated");
+                        elem.classList.remove("eca-animated");
                         elems.numAnimated--;
                     });
-                    
+                    break; 
                 }
                 
             }
             
             if (0 === elems.numAnimated) 
             {
-                //reset groupDelay because we may have come out of group delay with canceled animation (and it's set to 0 there)
-                //or user may have set removeAnimationWhenNotInView option which gives elems chance to animate again
+                // reset groupDelay because we may have come out of group delay with canceled animation (and it's set to 0 there)
+                // or user may have set removeAnimationWhenNotInView option which gives elems chance to animate again
                 elems.groupDelay = elems.groupDelay || elems.groupDelayOriginal; 
-                elems.finishedAnimating = false; //useful when removeAnimation option set
-               
+                elems.finishedAnimating = false; // useful when removeAnimation option set
             }
             else if (elems.length === elems.numAnimated)
             {
-                //so we don't run animate function on these elems again
+                // so we don't run animate function on these elems again
                 elems.finishedAnimating = true; 
                 
             }
             
-            //run a custom function with callback on animated elems if user defined one
             if (elems.trackingFn &&  newlyAnimatedElems.length > 0)
             {
                 elems.trackingFn(newlyAnimatedElems);
                 
             }
            
-             
         }
-            
     };
     
     /*
@@ -882,34 +1122,47 @@ was added).
     ===============================================================
     */
     
+    eca.ready(function getThrottleLimits()
+    {
+        const html = document.querySelector("html"); 
+                
+        eca.appState.throttleLim.resize = eca.animatable.getDurationInMS(html.dataset.ecaThrottleResize || "0ms");
+        eca.appState.throttleLim.scroll = eca.animatable.getDurationInMS(html.dataset.ecaThrottleScroll || "0ms");
+    });
     
-    //when the document has been fully loaded and parsed
     eca.ready(function runInitialAnimations()
     {
-        //grab all elems that have animations attached to them
-        //and set some initial animation properties for them
         eca.animatable.readyElementsForAnimation(); 
         
-        eca.animatable.requestAnimationUpdate(); //run first animation update and animate elems in view
-        
+        eca.animatable.requestAnimationUpdate();
     });
     
     eca.ready(function animateVisibleElemsOnScroll()
     {
-        eca.helperFns.listenOnElem(window, 'scroll', eca.animatable.requestAnimationUpdate);
+        eca.helperFns.listen(window, "scroll", eca.appState.throttleLim.scroll 
+            ? 
+                eca.helperFns.throttle(eca.animatable.requestAnimationUpdate, eca.appState.throttleLim.scroll)
+            : 
+                eca.animatable.requestAnimationUpdate
+        );
     });
     
     eca.ready(function animateVisibleElemsOnResize()
     {
-        eca.helperFns.listenOnElem(window, 'resize', eca.helperFns.throttle(function()
+        function ecaHandleResize()
         {
-            eca.appState.windowHeight = window.innerHeight; //update windowHeight on screen resize
+            eca.appState.windowHeight = window.innerHeight; 
             
-        }), 150);
+            eca.animatable.requestAnimationUpdate(); 
+        }
         
-        //play animations for newly visible elements
-        eca.helperFns.listenOnElem(window, 'resize', eca.animatable.requestAnimationUpdate); 
+        eca.helperFns.listen(window, "resize", eca.appState.throttleLim.resize 
+            ? 
+                eca.helperFns.throttle(ecaHandleResize, eca.appState.throttleLim.resize)
+            : 
+                ecaHandleResize
+        );
     }); 
-    
+   
     
    
