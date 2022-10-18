@@ -1,0 +1,33 @@
+{
+  "name": "eca",
+  "version": "1.0.0",
+  "description": "\"Library that adds CSS3 animations on scroll, while offering an enhanced feature set typically found in such libraries.\"",
+  "main": "dist/eca.cjs.js",
+  "module": "dist/eca.esm.js",
+  "browser": "dist/eca.min.js",
+  "scripts": {
+    "start": "npm run dev && webpack-dev-server --config ./webpack.config.js",
+    "dev": "webpack --progress --env dev=development",
+    "build": "webpack --env build=production"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/plakich/eca.git"
+  },
+  "author": "Phillip Lakich",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/plakich/eca/issues"
+  },
+  "homepage": "https://github.com/plakich/eca#readme",
+  "devDependencies": {
+    "@babel/cli": "^7.19.3",
+    "@babel/core": "^7.19.3",
+    "@babel/preset-env": "^7.19.3",
+    "babel-loader": "^8.2.5",
+    "core-js": "^3.25.5",
+    "webpack": "^5.74.0",
+    "webpack-cli": "^4.10.0",
+    "webpack-dev-server": "^4.11.1"
+  }
+}
